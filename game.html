@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>政治ゲーム</title>
+    <style>
+        body {
+            font-family: 'serif';
+            background: #2c3e50;
+            color: #ecf0f1;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .dashboard {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #34495e;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #bdc3c7;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #7f8c8d;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+
+        .leader-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 2px solid #f1c40f;
+            margin-right: 20px;
+            object-fit: cover;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: #2c3e50;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .stat-val {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #f1c40f;
+        }
+
+        .ideology-tag {
+            display: inline-block;
+            padding: 5px 10px;
+            background: #e67e22;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-top: 5px;
+        }
+
+        /* NPCリスト専用のスクロールバー設定 */
+        #npc-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #npc-list::-webkit-scrollbar-track {
+            background: #2c3e50;
+            border-radius: 10px;
+        }
+
+        #npc-list::-webkit-scrollbar-thumb {
+            background: #7f8c8d;
+            border-radius: 10px;
+        }
+
+        #npc-list::-webkit-scrollbar-thumb:hover {
+            background: #4ecca3;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="dashboard">
+        <div>
+            <span id="display-date" style="font-size: 1.5em; font-weight: bold; color: #4ecca3;">2026年 1月 1日</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="setGameSpeed(0)" id="btn-pause"
+                style="background: #e74c3c; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">一時停止</button>
+            <button onclick="setGameSpeed(1)" id="btn-play"
+                style="background: #4ecca3; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">再生</button>
+            <button onclick="setGameSpeed(3)" id="btn-fast"
+                style="background: #f1c40f; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">早送り</button>
+            <button onclick="setGameSpeed(50)" id="btn-skip"
+                style="background: hsl(113, 89%, 50%); border: none; padding: 10px; border-radius: 5px; cursor: pointer;">スキップ</button>
+        </div>
+        <div class="stat-card" style="margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>🗳️ 次の大統領選挙まで: <strong id="election-days-left">1460</strong> 日</span>
+                <button onclick="openElectionHistory()"
+                    style="background: #3498db; border: none; padding: 5px 10px; color: white; border-radius: 4px; cursor: pointer; font-size: 0.8em;">選挙履歴・分析</button>
+            </div>
+            <div style="width: 100%; background: #2c3e50; height: 10px; border-radius: 5px; margin-top: 5px;">
+                <div id="election-progress"
+                    style="width: 0%; background: #f1c40f; height: 100%; border-radius: 5px; transition: width 0.3s;">
+                </div>
+            </div>
+        </div>
+
+        <div id="voting-modal"
+            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:2500; justify-content:center; align-items:center;">
+            <div class="dashboard" style="width:90%; max-width:500px; text-align:center;">
+                <h2 id="voting-title">投票先を選んでください</h2>
+                <div id="candidate-options"
+                    style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:20px 0;">
+                </div>
+            </div>
+        </div>
+
+        <div id="universal-modal"
+            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:3000; justify-content:center; align-items:center; overflow-y: auto;">
+            <div class="dashboard" style="width:90%; max-width:600px; position:relative; animation: modalFadeIn 0.3s;">
+                <h2 id="modal-title"
+                    style="color:#f1c40f; text-align:center; border-bottom: 2px solid #f1c40f; padding-bottom:10px;">
+                    タイトル</h2>
+
+                <div id="modal-body" style="margin:20px 0; max-height: 70vh; overflow-y: auto;">
+                </div>
+
+                <div id="modal-footer" style="display:flex; gap:10px; justify-content:center;">
+                </div>
+            </div>
+        </div>
+
+        <style>
+            @keyframes modalFadeIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+        </style>
+
+        <div id="election-result-modal"
+            style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:2000; overflow-y: auto; padding: 20px; box-sizing: border-box;">
+            <div id="election-content" style="max-width: 800px; margin: 0 auto; color: white;">
+            </div>
+            <button onclick="closeElectionModal()" id="election-close"
+                style="display:block; margin: 20px auto; padding: 10px 40px; background: #e74c3c; border: none; color: white; border-radius: 5px; cursor: pointer;">閉じる</button>
+        </div>
+        <div class="header">
+            <img id="display-icon" class="leader-icon" src="" alt="指導者アイコン">
+            <div>
+                <h1 id="display-name" style="margin: 0;">氏名</h1>
+                <div id="ideology-label" class="ideology-tag">思想：解析中...</div>
+            </div>
+        </div>
+
+        <div class="status-grid">
+            <div class="stat-card">
+                <label>経済軸</label>
+                <div id="val-econ" class="stat-val">--</div>
+                <small id="desc-econ"></small>
+            </div>
+            <div class="stat-card">
+                <label>統治軸</label>
+                <div id="val-gov" class="stat-val">--</div>
+                <small id="desc-gov"></small>
+            </div>
+            <div class="stat-card">
+                <label>外交軸</label>
+                <div id="val-diplomatic" class="stat-val">--</div>
+                <small id="desc-diplomatic"></small>
+            </div>
+        </div>
+        <div class="dashboard" style="margin-top: 20px;">
+            <h2>人物たち</h2>
+
+            <div style="margin-bottom: 15px;">
+                <input type="text" id="npc-search" placeholder="名前や思想で検索..."
+                    style="width: 100%; padding: 10px; border-radius: 5px; border: none;">
+            </div>
+            <button onclick="addNewNPC()"
+                style="width: 100%; background: #4ecca3; border: none; padding: 10px; border-radius: 5px; cursor: pointer; color: #1a1a2e; font-weight: bold; margin-bottom: 15px;">
+                ＋ 新しい人物を追加
+            </button>
+
+            <div id="npc-list" style="
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 10px; 
+    max-height: 400px; 
+    overflow-y: auto; 
+    padding-right: 5px;
+"></div>
+            <div id="npc-modal"
+                style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; justify-content:center; align-items:center;">
+                <div class="dashboard" style="width:90%; max-width:400px;">
+                    <h3>人物のカスタマイズ</h3>
+                    <label>名前</label>
+                    <input type="text" id="edit-npc-name"
+                        style="width:100%; padding:8px; box-sizing:border-box; margin-bottom:10px;">
+
+                    <label>アイコン設定</label>
+                    <div style="display: flex; gap: 5px; margin-bottom:10px;">
+                        <input type="text" id="edit-npc-seed" placeholder="シード値" style="flex: 2; padding:8px;">
+                        <label
+                            style="flex: 1; background: #3498db; padding: 8px; border-radius: 4px; text-align: center; cursor: pointer; font-size: 0.8em; color: white;">
+                            画像選択
+                            <input type="file" id="npc-image-upload" accept="image/*" style="display: none;">
+                        </label>
+                    </div>
+
+                    <div style="text-align:center; margin:10px;">
+                        <img id="edit-npc-preview" src=""
+                            style="width:80px; height:80px; border-radius:50%; background:#2c3e50; border: 2px solid #bdc3c7;">
+                    </div>
+
+                    <div style="display:flex; gap:10px;">
+                        <button id="save-npc-btn"
+                            style="flex:1; background:#4ecca3; border:none; padding:10px; border-radius:5px; cursor:pointer;">保存</button>
+                        <button onclick="closeModal()"
+                            style="flex:1; background:#e74c3c; border:none; padding:10px; border-radius:5px; cursor:pointer; color:white;">キャンセル</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+</body>
+
+
+<script>
+    let presidentElect = null; // 次期当選者
+    let president = null;
+    let gameDate = new Date(2026, 0, 1); // 開始日
+
+    const lastNames = ["佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山田", "佐々木", "山口", "松本",
+        "ジョン", "アル", "ハーバード", "ハーバート", "ドナルド", "ジョー", "ジョセフ", "ジョージ", "ゲオルク", "アドルフ", "アロイス", "マーティン", "ウィリアム", "フランク",
+        "フランクリン", "カルヴィン", "カルビン", "ユスフ", "ヨセフ", "ヨセープ", "レシプ", "レシップ", "ジェームズ", "ジェームス", "ジェイムズ", "アーサー",
+        "チャールズ", "ウィンストン", "ウィントン", "ミラード", "ザカリー", "アンドリュー", "アンドルー", "李", "キア", "リシ", "ボリス", "ボブ", "ビル", "グロバー", "グロヴァー"
+        , "ハリー", "ジョンソン", "ジョーン", "ショーン", "ション", "フランキン", "アルフレッド"
+    ];
+    const firstNames = ["太郎", "次郎", "健一", "昭夫", "和也", "浩司", "悟", "直樹", "一郎", "進", "道夫", "正", "秀樹", "英二", "雄太",
+        "アダム", "アダムズ", "アダムス", "ジェファーソン", "パーティー", "パワード", "パート", "スミス", "ワイルド", "マクドナルド", "ドゥーイ", "ドーイ", "スコット", "いっぺい", "スカット",
+        "ボソン", "ポズン", "明夫", "あきお", "クーリッジ", "クーリー", "栗島", "シゲル", "茂", "しげお", "しげた"
+    ];
+    const specialMiddles = ["・D・", "・フォン・", "・デ・", "・ヴァン・"];
+
+    // A(65)からZ(90)までの文字コードを使って自動生成
+    const alphabetMiddles = Array.from({ length: 26 }, (_, i) => `・${String.fromCharCode(65 + i)}・`);
+
+    // 二つを合体させて最強のミドルネームリストを作る
+    const middleNames = [...specialMiddles, ...alphabetMiddles];
+    let electionCountdown = 1;
+    window.onload = function () {
+        // 1. LocalStorageからデータを取得
+        const savedData = localStorage.getItem('political_game_data');
+
+        if (!savedData) {
+            alert("データが見つかりません。プロフィールを設定してください。");
+            location.href = 'index.html'; // データがない場合は戻す
+            return;
+        }
+
+        const profile = JSON.parse(savedData);
+
+        npcs = []; // 配列を初期化
+
+        gameDate = profile.startYear || 2024;
+        gameDate = new Date(gameDate, 0, 1); // 月は0から始まるので0=1月
+
+        // 1. まずカスタムNPCをリストに入れる
+        if (profile.customNPCs && profile.customNPCs.length > 0) {
+            profile.customNPCs.forEach(c => {
+                npcs.push({
+                    id: "custom-" + Math.random().toString(36).substr(2, 9),
+                    name: c.name,
+                    icon: c.icon,
+                    ideology: {
+                        economy: parseInt(c.ideology.economy),
+                        government: parseInt(c.ideology.government),
+                        diplomacy: parseInt(c.ideology.diplomacy)
+                    },
+                    isCustom: true // カスタムNPCフラグ
+                });
+            });
+        }
+
+        // 2. HTML要素に反映
+        document.getElementById('display-name').innerText = profile.name;
+        document.getElementById('display-icon').src = profile.icon;
+
+        // 思想数値の反映
+        const econ = profile.ideology.economy;
+        const gov = profile.ideology.government;
+        const diplo = profile.ideology.diplomacy;
+
+        document.getElementById('val-econ').innerText = econ;
+        document.getElementById('val-gov').innerText = gov;
+        document.getElementById('val-diplomatic').innerText = diplo;
+
+        // 3. 数値に基づいた簡易説明の表示
+        document.getElementById('desc-econ').innerText = econ > 60 ? "市場経済重視" : (econ < 40 ? "計画経済重視" : "混合経済");
+        document.getElementById('desc-gov').innerText = gov > 60 ? "秩序と権威" : (gov < 40 ? "個人の自由" : "中庸な統治");
+        document.getElementById('desc-diplomatic').innerText = gov > 60 ? "国家に集中" : (gov < 40 ? "自由外交" : "普通外交");
+
+        // プロフィールで設定した人数分だけ作成
+        const count = profile.initialNpcCount || 5;
+        for (let i = 0; i < count; i++) {
+            const uniqueName = generateComplexName(); // 進化した名前を生成
+            npcs.push(createRandomNPC(uniqueName));
+        }
+        // 初回生成分を保存
+
+        // 4. 称号の判定（おまけ）
+        let title = "中道";
+        if (gov > 70 && econ > 70) title = "金じゃんじゃん主義";
+        if (gov < 30 && econ < 30) title = "平等主義の過激派";
+        if (gov > 70 && econ < 30) title = "独裁者";
+        if (gov < 30 && econ > 70) title = "自由主義者";
+
+        renderNPCs("", profile.ideology);
+
+
+        document.getElementById('ideology-label').innerText = "総合的な思想: " + title;
+
+        document.getElementById('edit-npc-seed').addEventListener('input', (e) => {
+            const seed = e.target.value || "default";
+            document.getElementById('edit-npc-preview').src = `https://api.dicebear.com/9.x/personas/svg?seed=${seed}`;
+        });
+        // ファイルアップロード
+        document.getElementById('npc-image-upload').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('edit-npc-preview').src = event.target.result;
+                    document.getElementById('edit-npc-seed').value = ""; // アップロード時はシードを空に
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    };
+
+    // 汎用系 //
+    /**
+     * @param {string} title - モーダルのタイトル
+     * @param {string} htmlContent - 中身のHTML（文字列でOK）
+     * @param {Array} buttons - ボタンの配列 [{text: "文字", cb: 関数, color: "色"}]
+     */
+    function openUniversalModal(title, htmlContent, buttons = []) {
+        document.getElementById('modal-title').innerText = title;
+        document.getElementById('modal-body').innerHTML = htmlContent;
+
+        const footer = document.getElementById('modal-footer');
+        footer.innerHTML = ""; // 以前のボタンをクリア
+
+        buttons.forEach(btnInfo => {
+            const btn = document.createElement('button');
+            btn.innerText = btnInfo.text;
+            btn.style.cssText = `padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; background:${btnInfo.color || '#4ecca3'}; color:white;`;
+            btn.onclick = () => {
+                btnInfo.cb(); // コールバック実行
+            };
+            footer.appendChild(btn);
+        });
+
+        document.getElementById('universal-modal').style.display = 'flex';
+    }
+
+    function closeUniversalModal() {
+        document.getElementById('universal-modal').style.display = 'none';
+    }
+    // 汎用シリーズ終わり //
+
+    function generateComplexName() {
+        const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const rand = Math.random(); // 0.0 〜 1.0
+
+        if (rand < 0.10) {
+            // 10%の確率で「〇〇2世」
+            const suffixes = ["2世", "Jr.", "3世", "卿"];
+            const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+            return `${lastName}・${firstName}${suffix}`;
+        } else if (rand < 0.20) {
+            // 次の10%の確率で「ミドルネーム」
+            const middle = middleNames[Math.floor(Math.random() * middleNames.length)];
+            return `${lastName}${middle}${firstName}`;
+        } else {
+            // 残り80%は通常の「苗字 名前」
+            return `${lastName}・${firstName}`;
+        }
+    }
+
+
+    function createRandomNPC(name) {
+        // ランダムなシード文字列を生成
+        const randomSeed = Math.random().toString(36).substring(7);
+        return {
+            id: Date.now() + Math.random(), // 💥 固有のIDを追加
+            name: name,
+            // DiceBear APIを使用 (seedをランダムに)
+            icon: `https://api.dicebear.com/9.x/personas/svg?seed=${randomSeed}`,
+            ideology: {
+                economy: Math.floor(Math.random() * 101),
+                government: Math.floor(Math.random() * 101),
+                diplomacy: Math.floor(Math.random() * 101)
+            }
+        };
+    }
+
+    // NPCのデータ配列
+    let npcs = [
+    ];
+
+    // 思想の近さを計算する関数（親密度）
+    function calculateAffinity(ideology1, ideology2) {
+        // 各軸の差の絶対値を合計し、100から引く（単純な距離計算）
+        const diffEcon = Math.abs(ideology1.economy - ideology2.economy);
+        const diffGov = Math.abs(ideology1.government - ideology2.government);
+        const diffDipl = Math.abs(ideology1.diplomacy - ideology2.diplomacy);
+
+        const avgDiff = (diffEcon + diffGov + diffDipl) / 3;
+        return Math.round(100 - avgDiff); // 100に近いほど仲良し
+    }
+    let currentEditingIndex = null;
+
+    function renderNPCs(filterText = "", playerIdeology) {
+        const listElement = document.getElementById('npc-list');
+        listElement.innerHTML = "";
+
+        npcs.forEach((npc) => {
+            if (!npc.name.includes(filterText)) return;
+
+            const affinity = calculateAffinity(playerIdeology, npc.ideology);
+            const title = getIdeologyTitle(npc.ideology); // 称号を取得
+
+            const card = document.createElement('div');
+            card.className = "stat-card";
+            card.style.cursor = "pointer";
+
+            // 修正ポイント：indexではなくnpc.idを使ってモーダルを開く
+            card.onclick = () => openNpcModal(npc.id);
+
+            card.innerHTML = `
+            <div style="display:flex; align-items:center; margin-bottom:5px;">
+                <img src="${npc.icon}" style="width:40px; height:40px; border-radius:50%; margin-right:10px; background:#2c3e50;">
+                <div>
+                    <div style="font-weight:bold;">${npc.name}</div>
+                    <div style="font-size:0.7em; color:${affinity > 55 ? '#4ecca3' : '#e74c3c'}">
+                        関係: ${affinity}%
+                    </div>
+                </div>
+            </div>
+            <div class="ideology-tag" style="font-size: 0.65em; margin-top: 2px; background: #3498db;">
+                ${title}
+            </div>
+        `;
+            listElement.appendChild(card);
+        });
+    }
+
+    // --- 新しいNPCを追加する関数 ---
+    function addNewNPC() {
+        // デフォルト値で新しいNPCを作成
+        const newNpc = createRandomNPC("新しい人物");
+        // 配列の先頭に追加
+        npcs.unshift(newNpc);
+
+        // そのまま編集モーダルを開く
+        const playerIdeology = JSON.parse(localStorage.getItem('political_game_data')).ideology;
+        renderNPCs("", playerIdeology);
+    }
+
+    // イデオロギー取得
+    // 思想スコアから称号（思想名）を返す共通関数
+    function getIdeologyTitle(ideology) {
+        const { economy: econ, government: gov } = ideology;
+        let title = "中道";
+        if (gov > 70 && econ > 70) title = "新自由主義"; // 元：金じゃんじゃん
+        if (gov < 30 && econ < 30) title = "アナーキズム"; // 元：平等主義の過激派
+        if (gov > 70 && econ < 30) title = "権威主義";   // 元：独裁者
+        if (gov < 30 && econ > 70) title = "自由主義"; // 元：自由主義者
+
+        // さらに細かく分岐させることも可能です
+        return title;
+    }
+
+    // --- 保存処理の修正 (保存ボタンのonclick内) ---
+    // --- 1. アイコンのプレビュー制御 (DiceBear & アップロード) ---
+
+    // シード値入力
+
+    // --- 2. 保存処理 (一箇所に統合) ---
+    // --- 保存処理（これ1つだけにしてください！） ---
+    document.getElementById('save-npc-btn').onclick = () => {
+        // currentEditingIdを使って、元の配列から該当者を探す
+        const targetNpc = npcs.find(n => n.id === currentEditingId);
+        if (!targetNpc) return;
+
+        targetNpc.name = document.getElementById('edit-npc-name').value;
+        targetNpc.icon = document.getElementById('edit-npc-preview').src;
+
+        closeModal();
+        const profile = JSON.parse(localStorage.getItem('political_game_data'));
+        renderNPCs(document.getElementById('npc-search').value, profile.ideology);
+    };
+
+    // --- 3. 検索イベント ---
+    document.getElementById('npc-search').addEventListener('input', (e) => {
+        const profile = JSON.parse(localStorage.getItem('political_game_data'));
+        renderNPCs(e.target.value, profile.ideology);
+    });
+
+    function closeModal() {
+        document.getElementById('npc-modal').style.display = 'none';
+    }
+    // NPCカスタマイズ
+
+    // 1. モーダルを開く
+    function openNpcModal(targetId) {
+        // IDが一致する人を一人探す
+        const npc = npcs.find(n => n.id === targetId);
+        if (!npc) return;
+
+        currentEditingId = targetId; // currentEditingIndexの代わりにIdを使う
+
+        document.getElementById('edit-npc-name').value = npc.name;
+        const seedMatch = npc.icon.match(/seed=([^&]+)/);
+        document.getElementById('edit-npc-seed').value = seedMatch ? seedMatch[1] : "";
+        document.getElementById('edit-npc-preview').src = npc.icon;
+        document.getElementById('npc-modal').style.display = 'flex';
+    }
+
+    // 2. モーダルを閉じる
+    function closeModal() {
+        document.getElementById('npc-modal').style.display = 'none';
+    }
+
+    // 3. アイコンのリアルタイムプレビュー
+    document.getElementById('edit-npc-seed').addEventListener('input', (e) => {
+        const newSeed = e.target.value || "default";
+        document.getElementById('edit-npc-preview').src = `https://api.dicebear.com/9.x/personas/svg?seed=${newSeed}`;
+    });
+
+    let gameTimer = null;
+    let gameSpeed = 0; // 0: 停止, 1: 通常, 3: 早送り
+
+    // 日付を表示する関数
+    function updateDateDisplay() {
+        const year = gameDate.getFullYear();
+        const month = gameDate.getMonth() + 1;
+        const day = gameDate.getDate();
+        document.getElementById('display-date').innerText = `${year}年 ${month}月 ${day}日`;
+    }
+
+    // ゲームスピードを変更する関数
+    function setGameSpeed(speed) {
+        gameSpeed = speed;
+
+        // 既存のタイマーをクリア
+        if (gameTimer) clearInterval(gameTimer);
+
+        // スピードが0より大きいならタイマー開始
+        if (gameSpeed > 0) {
+            // 通常は1秒(1000ms)ごとに1日進む。スピードが3なら1/3の速さで進む
+            gameTimer = setInterval(() => {
+                gameDate.setDate(gameDate.getDate() + 1);
+                updateDateDisplay();
+                updateElectionStatus();
+
+                // 毎月1日に何かイベントを起こすならここ
+                if (gameDate.getDate() === 1) {
+                    console.log("月の始まり！予算の更新など...");
+                }
+            }, 1000 / gameSpeed);
+        }
+
+        // ボタンの見た目を変える（任意）
+        document.getElementById('btn-pause').style.opacity = speed === 0 ? "1" : "0.5";
+        document.getElementById('btn-play').style.opacity = speed === 1 ? "1" : "0.5";
+        document.getElementById('btn-fast').style.opacity = speed === 3 ? "1" : "0.5";
+        document.getElementById('btn-skip').style.opacity = speed === 50 ? "1" : "0.5";
+
+    }
+    // 選挙
+    // window.onloadの外か、適切な場所に追加
+    let electionHistory = []; // 歴代の結果を保存
+
+    function updateElectionStatus() {
+        // 1. カウントダウンの進行（選挙前のみ減らす）
+        if (electionCountdown > 0) {
+            electionCountdown--;
+        }
+
+        // 2. 選挙の発火（0になった瞬間）
+        if (electionCountdown === 0) {
+            runElection();
+            electionCountdown = -1; // 就任式まで「待機モード」へ
+        }
+
+        // 3. UI更新（マイナスを表示させない、100%で止める）
+        const displayDays = Math.max(0, electionCountdown);
+        document.getElementById('election-days-left').innerText = displayDays;
+
+        // 選挙後はバーを100%で固定、選挙前は計算
+        let progress;
+        if (electionCountdown <= 0) {
+            progress = 100;
+        } else {
+            progress = ((1460 - electionCountdown) / 1460) * 100;
+        }
+        document.getElementById('election-progress').style.width = Math.min(100, progress) + "%";
+
+        // 4. 就任式のチェック (1月20日)
+        if (gameDate.getMonth() === 0 && gameDate.getDate() === 20 && presidentElect) {
+            holdInauguration();
+            // ※この中の処理で electionCountdown = 1460 に戻る
+        }
+    }
+
+    function holdInauguration() {
+        setGameSpeed(0); // 時間を止める
+
+        let farewellMessage = "";
+
+        if (president) {
+            // 前大統領と新大統領の思想相性を計算
+            const affinity = calculateAffinity(president.ideology, presidentElect.ideology);
+
+            // 相性に応じたメッセージ分岐
+            if (affinity >= 80) {
+                farewellMessage = `「${presidentElect.name}、あなたは、大統領として職務を頑張ってください、応援しています。」`;
+            } else if (affinity >= 50) {
+                farewellMessage = `「${presidentElect.name}、これからはあなたの時代です、頑張ってください、応援してます。」`;
+            } else if (affinity >= 30) {
+                farewellMessage = `「${presidentElect.name}、あなたが大統領になるとは思わなかった、これからの時代がどうなるかわかりませんが、頑張ってください。」`;
+            } else {
+                farewellMessage = `「${presidentElect.name}、あなたが大統領になるとはだれも予想していなかった、正直言ってこれが現実だとは思いたくない。」`;
+            }
+        }
+
+        const isPlayer = presidentElect.isPlayer; // プレイヤーが当選したか
+        const title = isPlayer ? "あなたの就任式" : `${presidentElect.name}大統領就任式`;
+        let html = `
+        <div style="background:#1a2a6c; color:white; padding:30px; border-radius:10px; text-align:center; border: 5px solid #f1c40f;">
+            <h1 style="margin-bottom:20px;">🏛️就任式の日</h1>
+            <img src="${presidentElect.icon}" style="width:120px; height:120px; border-radius:50%; border:5px solid white; background:white;">
+            <h2 style="margin-top:20px;">${presidentElect.name}</h2>
+            <p style="font-style:italic; font-size:1.1em; margin:20px 0;">
+                "私は大統領に就任します。"
+            </p>
+            <div style="font-size:0.9em; color:#bdc3c7;">
+                ${gameDate.getFullYear()}年1月20日 正午
+            </div>
+        </div>
+    `;
+        if (president) {
+            html += `<div style="background:#1a2a6c; color:white; padding:30px; border-radius:10px; text-align:center; border: 5px solid #f1c40f;">
+            <h1 style="margin-bottom:20px; font-size:1.5em;">🏛️就任式の日</h1>
+            
+                        <img src="${president.icon}" style="width:120px; height:120px; border-radius:50%; border:5px solid white; background:white;">
+            <h2 style="margin-top:20px;">${president.name}</h2>
+                <div style="margin-bottom:20px; padding:10px; background:rgba(0,0,0,0.3); border-radius:5px;">
+                    <small>前大統領${president.name}の退任:</small>
+                    <p style="font-size:1.1em; color:#ecf0f1;">${farewellMessage}</p>
+                </div>
+            </div >`;
+        }
+        president = presidentElect
+
+        openUniversalModal(title, html, [
+            {
+                text: "新政権、始動",
+                cb: () => {
+                    // ここで正式に大統領を更新する
+                    currentPresident = presidentElect;
+                    presidentElect = null; // クリア
+                    closeUniversalModal();
+                    setGameSpeed(1);
+                },
+                color: "#f1c40f"
+            }
+        ]);
+    }
+
+    function runElection() {
+        setGameSpeed(0); // 時間を止める
+        const profile = JSON.parse(localStorage.getItem('political_game_data'));
+
+        // 立候補確認用のHTMLコンテンツ
+        const htmlContent = `
+            <div style = "text-align:center; padding:20px;" >
+            <p style="font-size:1.2em;">第${electionHistory.length + 1}回大統領選挙が公示されました。</p>
+            <p>この選挙に立候補しますか？</p>
+            <div style="margin-top:20px; font-size:0.8em; color:#bdc3c7;">
+                ※立候補すると、あなたの支持者が、あなたに投票します。<br>
+                立候補しない場合は、他の候補者への投票権のみ持ちます。
+            </div>
+        </div >
+            `;
+
+        // 汎用モーダルで「立候補するか」を聞く
+        openUniversalModal(
+            "🗳️ 選挙立候補の確認",
+            htmlContent,
+            [
+                {
+                    text: "立候補する！",
+                    color: "#4ecca3",
+                    cb: () => proceedToVote(true) // 立候補して次へ
+                },
+                {
+                    text: "今回は見送る",
+                    color: "#e74c3c",
+                    cb: () => proceedToVote(false) // 立候補せず次へ
+                }
+            ]
+        );
+    }
+
+    function proceedToVote(willRun) {
+        closeUniversalModal(); // 一旦閉じる
+
+        const profile = JSON.parse(localStorage.getItem('political_game_data'));
+        let candidates = [];
+
+        // プレイヤーを候補者に追加
+        if (willRun) {
+            candidates.push({
+                id: 'player',
+                name: profile.name,
+                icon: profile.icon,
+                isPlayer: true,
+                ideology: profile.ideology,
+                votes: 0,
+                supporters: []
+            });
+        }
+
+        // NPCからランダムに3人立候補（先行者利益枠）
+        const npcPotential = [...npcs].sort(() => 0.5 - Math.random()).slice(0, 3);
+        npcPotential.forEach(n => {
+            candidates.push({ ...n, votes: 0, supporters: [], isPlayer: false });
+        });
+
+        // 次の「投票先選択」へ進む
+        showVotingScreen(candidates, willRun);
+    }
+
+    function showVotingScreen(candidates, willRun) {
+        const title = willRun ? "投票する候補者を選んでください" : "投票する候補者を選んでください";
+
+        let html = `<div style = "display:grid; grid-template-columns:1fr 1fr; gap:10px;" > `;
+        candidates.forEach(cand => {
+            html += `
+            <div id = "vote-target-${cand.id}" class="stat-card" style = "cursor:pointer; text-align:center; border: 1px solid #7f8c8d;" >
+                <img src="${cand.icon}" style="width:50px; border-radius:50%;"><br>
+                    <strong>${cand.name}</strong><br>
+                        <small>${getIdeologyTitle(cand.ideology)}</small>
+                    </div>
+                    `;
+        });
+        html += `</div>`;
+
+        // 汎用モーダルで投票先を表示
+        openUniversalModal(title, html, []); // ボタンはJSで後からイベント付与
+
+        // 各カードにクリックイベントを付与
+        candidates.forEach(cand => {
+            document.getElementById(`vote-target-${cand.id}`).onclick = () => {
+                finalizeElection(candidates, cand.id);
+            };
+        });
+    }
+
+    function finalizeElection(candidates, playerVoteTargetId) {
+        closeUniversalModal();
+        document.getElementById('voting-modal').style.display = 'none';
+
+        // 1. NPCたちの自動投票（先行者補正あり）
+        npcs.forEach(npc => {
+            let bestAffinity = -1;
+            let voteTo = null;
+
+            candidates.forEach(cand => {
+                const aff = calculateAffinity(npc.ideology, cand.ideology);
+                const priorityBonus = (candidates.indexOf(cand) === 0) ? 8 : 0; // 筆頭候補への補正
+
+                if ((aff + priorityBonus) > bestAffinity) {
+                    bestAffinity = aff + priorityBonus;
+                    voteTo = cand;
+                }
+            });
+            if (voteTo) {
+                voteTo.votes++;
+                voteTo.supporters.push(npc.icon);
+            }
+        });
+
+        // 2. プレイヤーの1票を加算
+        const myChoice = candidates.find(c => c.id === playerVoteTargetId);
+        if (myChoice) {
+            myChoice.votes++;
+            const profile = JSON.parse(localStorage.getItem('political_game_data'));
+            myChoice.supporters.push(profile.icon);
+        }
+
+        // 3. 結果表示
+        candidates.sort((a, b) => b.votes - a.votes);
+        presidentElect = candidates[0];
+
+        electionHistory.push({
+            date: new Date(gameDate),
+            winner: presidentElect,
+            all: candidates,
+            inaugurated: false // まだ就任していないフラグ
+        });
+        showElectionResult(candidates);
+    }
+
+    function showElectionResult(results) {
+        const content = document.getElementById('election-content');
+        const [first, second, ...others] = results;
+
+        let html = `<h1 style="text-align:center; color:#f1c40f;">🗳️ 選挙結果発表</h1>`;
+
+        // 上位2名の特大表示
+        html += `
+                    <div style="display:flex; justify-content:center; gap:20px; margin-top:30px;">
+                        <div style="text-align:center; border:2px solid #f1c40f; padding:20px; border-radius:10px; width:45%;">
+                            <h2>🥇 1位 (当選)</h2>
+                            <img src="${first.icon}" style="width:120px; height:120px; border-radius:50%; border:4px solid #f1c40f;">
+                                <div style="font-size:1.5em; font-weight:bold; margin-top:10px;">${first.name}</div>
+                                <div style="font-size:2em; color:#f1c40f;">${first.votes} 票</div>
+                                <div style="margin-top:10px;">支持者:<br>${first.supporters.map(img => `<img src="${img}" style="width:25px; border-radius:50%;">`).join("")}</div>
+                        </div>
+                        <div style="text-align:center; border:2px solid #bdc3c7; padding:20px; border-radius:10px; width:40%;">
+                            <h2>🥈 2位</h2>
+                            <img src="${second.icon}" style="width:100px; height:100px; border-radius:50%; border:2px solid #bdc3c7;">
+                                <div style="font-size:1.2em; margin-top:10px;">${second.name}</div>
+                                <div style="font-size:1.8em; color:#bdc3c7;">${second.votes} 票</div>
+                                <div style="margin-top:10px;">支持者:<br>${second.supporters.map(img => `<img src="${img}" style="width:20px; border-radius:50%;">`).join("")}</div>
+                        </div>
+                    </div>`;
+
+        // 残りの候補者を下に小さく
+        html += `<div style="display:flex; justify-content:center; gap:15px; margin-top:40px; flex-wrap:wrap;">`;
+        others.forEach(cand => {
+            html += `
+        <div style="text-align:center; background:#34495e; padding:10px; border-radius:8px; width:100px; font-size:0.8em;">
+            <img src="${cand.icon}" style="width:50px; border-radius:50%;">
+            <div>${cand.name}</div>
+            <div>${cand.votes} 票</div>
+        </div>`;
+        });
+        html += `</div>`;
+        html += `
+                    <div style="text-align:center;">
+                        <h2 style="color:#f1c40f;">選挙速報</h2>
+                        <img src="${presidentElect.icon}" style="width:100px; border-radius:50%; border:4px solid #f1c40f;">
+                            <p style="font-size:1.2em;"><strong>${presidentElect.name}</strong> 氏の当選が確実となりました！</p>
+                            <p>1月20日の就任式まで、政権移行期間に入ります。</p>
+                    </div>
+                    `;
+
+        content.innerHTML = html;
+        document.getElementById('election-result-modal').style.display = 'block';
+        setGameSpeed(0); // 結果発表時は時間を止める
+        electionCountdown = 1460;
+
+    }
+
+    // 選挙結果を閉じたらディナー会へ
+    function closeElectionModal() {
+        document.getElementById('election-result-modal').style.display = 'none';
+        // 選挙結果の速報を表示
+        // 開催される場合
+        startPostElectionDinner();
+    }
+
+    function startPostElectionDinner() {
+        // 1. まず40%の確率でイベント自体が消滅
+        if (Math.random() < 0.4) {
+            openUniversalModal(
+                "🍽️ ディナー会中止",
+                `<div style="text-align:center;">各候補者の諸事情により、本日のディナー会は中止です。</div>`,
+                [{ text: "了解", cb: closeUniversalModal, color: "#7f8c8d" }]
+            );
+            return;
+        }
+
+        const lastElection = electionHistory[electionHistory.length - 1];
+        const playerInElection = lastElection.all.some(cand => cand.isPlayer);
+
+        if (playerInElection) {
+            // 【立候補していた場合】まず参加するかどうかをプレイヤーに聞く
+            openUniversalModal(
+                "✉️ ディナーへの招待",
+                `<div style="text-align:center;">
+                選挙が終わり、レストランから招待状が届きました。<br>
+                生配信ライブが行われる予定ですが、出席しますか？
+            </div>`,
+                [
+                    { text: "出席する", cb: () => processDinner(true), color: "#4ecca3" },
+                    { text: "不参加", cb: () => processDinner(false), color: "#e74c3c" }
+                ]
+            );
+        } else {
+            // 【観客の場合】そのまま配信を見る画面へ
+            processDinner(false, true);
+        }
+    }
+
+    /**
+     * 実際のディナー処理
+     * @param {boolean} playerAttending - プレイヤーが出席するか
+                    * @param {boolean} isSpectator - 観客モードかどうか
+                    */
+    function processDinner(playerAttending, isSpectator = false) {
+        const lastElection = electionHistory[electionHistory.length - 1];
+        let attendeesCount = 0;
+        let html = `<div style="background:#000; color:#0f0; padding:5px; font-family:monospace; margin-bottom:10px;">🔴 LIVE:【ごはん】オツカレさまディナー</div>`;
+        html += `<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:15px;">`;
+
+        lastElection.all.forEach(cand => {
+            let statusText = "";
+            let opacity = "1";
+            let isAttending = false;
+
+            if (cand.isPlayer) {
+                // プレイヤーの判定
+                if (playerAttending) {
+                    statusText = "✅ 参加";
+                    isAttending = true;
+                } else {
+                    statusText = "💢 不参加";
+                    opacity = "0.3";
+                }
+            } else {
+                // NPCの判定
+                const rand = Math.random();
+                if (rand < 0.15) { statusText = "🤒 風邪欠席"; opacity = "0.3"; }
+                else if (rand < 0.3) { statusText = "💢 不参加"; opacity = "0.3"; }
+                else {
+                    statusText = "✅ 参加";
+                    isAttending = true;
+                }
+            }
+
+            if (isAttending) attendeesCount++;
+
+            html += `
+                        <div style="text-align:center; opacity:${opacity}; background:#2c3e50; padding:10px; border-radius:10px; border: 1px solid ${opacity === "1" ? '#4ecca3' : 'transparent'};">
+                        <img src="${cand.icon}" style="width:60px; border-radius:50%;"><br>
+                            <strong style="font-size:0.8em;">${cand.name}</strong><br>
+                                <span style="font-size:0.65em;">${statusText}</span>
+                            </div>
+                            `;
+        });
+        html += `</div>`;
+
+        // 結果メッセージの生成
+        let resultMessage = "";
+        if (isSpectator) {
+            resultMessage = "視聴者としてライブを見守っています。";
+        } else if (playerAttending) {
+            resultMessage = attendeesCount > 1 ? "賑やかな会食となりました、非常に楽しい食事でした。" : "参加者はあなた一人でした。豪華な料理を独り占めです。";
+        } else {
+            resultMessage = "あなたは欠席しました。ライブ配信のチャット欄ではあなたの不在が噂されています。";
+        }
+
+        html += `<p style="margin-top:15px; font-size:0.9em; text-align:center; color:#bdc3c7;">${resultMessage}</p>`;
+
+        // ボタンの設定
+        const buttons = [];
+        if (isSpectator) {
+            buttons.push({ text: "食事ライブを最後まで見る", cb: closeUniversalModal, color: "#3498db" });
+            buttons.push({ text: "食事ライブを閉じる", cb: closeUniversalModal, color: "#7f8c8d" });
+        } else {
+            buttons.push({ text: playerAttending ? "会食を終える" : "ライブ配信を閉じる", cb: closeUniversalModal, color: "#4ecca3" });
+        }
+
+        openUniversalModal("🍽️ 選挙後ディナー結果", html, buttons);
+    }
+
+    function openElectionHistory() {
+        setGameSpeed(0);
+
+        if (electionHistory.length === 0) {
+            openUniversalModal(
+                "📜 歴代選挙アーカイブ",
+                `<div style="text-align:center; padding:50px;">
+                <h2>まだ選挙の記録がありません。</h2>
+                <p>最初の選挙が実施されるまで待ちましょう。</p>
+             </div>`,
+                [{ text: "閉じる", cb: closeUniversalModal, color: "#7f8c8d" }]
+            );
+            return;
+        }
+
+        let html = `<div style="padding:10px;">`;
+        // 最新の履歴から順に生成
+        [...electionHistory].reverse().forEach((record, index) => {
+            const realIndex = electionHistory.length - 1 - index;
+            const dateStr = `${record.date.getFullYear()}/${record.date.getMonth() + 1}/${record.date.getDate()}`;
+            const isPlayerWinner = record.winner.isPlayer;
+
+            html += `
+                                <div onclick="showElectionDetail(${realIndex})"
+                                    style="background:#34495e; padding:15px; border-radius:10px; margin-bottom:12px; border-left: 5px solid ${isPlayerWinner ? '#4ecca3' : '#e74c3c'}; cursor:pointer;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <div>
+                                            <div style="font-size:0.7em; color:#bdc3c7;">第 ${realIndex + 1} 期 選挙</div>
+                                            <div style="font-weight:bold; font-size:1.1em;">当選者: ${record.winner.name}</div>
+                                            <div style="font-size:0.75em;">${dateStr} 実施</div>
+                                        </div>
+                                        <img src="${record.winner.icon}" style="width:45px; border-radius:50%; background:#2c3e50;">
+                                    </div>
+                                </div>`;
+        });
+        html += `</div>`;
+        setGameSpeed(0);
+
+        // 汎用モーダルで履歴一覧を表示
+        openUniversalModal(
+            "📜 歴代選挙アーカイブ",
+            html,
+            [{ text: "閉じる", cb: closeUniversalModal, color: "#34495e" }]
+        );
+    }
+
+    function showElectionDetail(historyIndex) {
+        const record = electionHistory[historyIndex];
+        const totalVotes = record.all.reduce((sum, c) => sum + c.votes, 0);
+        const dateStr = `${record.date.getFullYear()}年${record.date.getMonth() + 1}月${record.date.getDate()}日`;
+
+        // Wikipedia Infobox風のHTML構築
+        let html = `
+                            <div style="background:#f8f9fa; color:#202122; padding:20px; border-radius:5px; font-family: sans-serif;">
+                                <div style="text-align:center; border-bottom:1px solid #a2a9b1; margin-bottom:10px; padding-bottom:10px;">
+                                    <h2 style="margin:0; font-size:1.2em;">第 ${historyIndex + 1} 期 大統領選挙 詳細</h2>
+                                    <small>${dateStr} 実施</small>
+                                </div>
+
+                                <table style="width:100%; border-collapse: collapse; text-align:center; table-layout: fixed;">
+                                    <tr>
+                                        ${record.all.slice(0, 3).map((cand, i) => `
+                        <td style="padding:5px; vertical-align: top;">
+                            <div style="font-size:0.8em; font-weight:bold;">${i === 0 ? '【当選】' : '候補者'}</div>
+                            <img src="${cand.icon}" style="width:80px; height:80px; border-radius:50%; background:#eaecf0; border:1px solid #a2a9b1; margin:5px 0;">
+                            <div style="font-weight:bold; height:2.4em; overflow:hidden;">${cand.name}</div>
+                            <div style="background:${i === 0 ? '#4ecca3' : '#3498db'}; color:white; padding:2px; margin:5px 0; font-size:0.9em;">
+                                ${((cand.votes / totalVotes) * 100).toFixed(1)}%
+                            </div>
+                            <div style="font-size:1.1em; font-weight:bold;">${cand.votes} 票</div>
+                        </td>
+                    `).join('')}
+                                    </tr>
+                                </table>
+
+                                <div style="margin-top:20px; border-top:1px solid #a2a9b1; padding-top:10px;">
+                                    <h3 style="font-size:0.9em; border-bottom:1px solid #eaecf0;">📊 投票者分析（支持層アイコン）</h3>
+                                    <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
+                                        ${record.all.slice(0, 3).map(cand => `
+                        <div style="flex:1; min-width:80px; background:#fff; border:1px solid #c8ccd1; padding:5px; border-radius:3px;">
+                            <small style="display:block; border-bottom:1px solid #eee;">${cand.name.split(' ')[0]}派</small>
+                            <div style="display:flex; flex-wrap:wrap; gap:2px; margin-top:5px;">
+                                ${cand.supporters.map(sIcon => `<img src="${sIcon}" style="width:18px; height:18px; border-radius:50%;">`).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                                    </div>
+                                </div>
+
+                                <div style="margin-top:15px; font-size:0.75em; color:#54595d; line-height:1.4;">
+                                    <p>注記: この選挙結果は自動集計に基づいています。
+                                        総得票数: ${totalVotes}票 / 棄権: なし</p>
+                                </div>
+                            </div>
+    `;
+
+        // 汎用モーダルを起動！
+        openUniversalModal(
+            "Wikipedia: 選挙アーカイブ",
+            html,
+            [{ text: "アーカイブを閉じる", cb: closeUniversalModal, color: "#34495e" }]
+        );
+    }
+</script>
+
+</html>

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>政治ゲーム - プロフィール設定</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 400px;
+        }
+
+        .profile-pic {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 2px solid #ddd;
+            object-fit: cover;
+            display: block;
+            margin: 10px auto;
+        }
+
+        .field {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px;
+        }
+
+        .axis-container {
+            margin-top: 20px;
+            border-top: 1px solid #eee;
+            pt: 15px;
+        }
+
+        .axis-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2 style="text-align:center;">指導者プロフィール</h2>
+
+        <div class="field">
+            <img id="preview" class="profile-pic" src="https://via.placeholder.com/100" alt="Avatar">
+            <label for="icon-upload">アイコンをアップロード</label>
+            <input type="file" id="icon-upload" accept="image/*">
+        </div>
+
+        <div class="field">
+            <label>氏名</label>
+            <input type="text" id="leader-name" placeholder="名前を入力してください">
+        </div>
+
+        <div class="axis-container">
+            <label>思想</label>
+
+            <div class="field">
+                <div class="axis-label"><span>経済：平等主義</span><span>資本主義</span></div>
+                <input type="range" id="econ-axis" value="50">
+            </div>
+
+            <div class="field">
+                <div class="axis-label"><span>考え方：優しい</span><span>厳しい</span></div>
+                <input type="range" id="gov-axis" value="50">
+            </div>
+
+            <div class="field">
+                <div class="axis-label"><span>外交：世界中と会話する。</span><span>国家に集中する</span></div>
+                <input type="range" id="diplomatic-axis" value="50">
+            </div>
+        </div>
+
+        <div class="field" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+            <label>開始年 (西暦)</label>
+            <input type="number" id="start-year" value="2024" min="1" max="3000"
+                style="width: 100%; padding: 8px; box-sizing: border-box;">
+            <small style="color: #666;">※ゲームが始まる年を設定してください</small>
+        </div>
+
+        <div class="field" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+            <label style="font-size: 1.1em; color: #2c3e50;">👥 カスタム登場人物設定</label>
+            <div id="custom-npc-list" style="margin-top: 10px;">
+            </div>
+            <button onclick="addCustomNPCField()"
+                style="background: #6c757d; font-size: 0.9em; width: auto; padding: 8px 15px;">
+                ＋ 新しいカスタム人物を作成
+            </button>
+        </div>
+
+        <div class="field" style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+            <label>初期の登場人物数</label>
+            <input type="number" id="npc-count" value="5" min="1" max="50"
+                style="width: 100%; padding: 8px; box-sizing: border-box;">
+            <small style="color: #666;">※30〜5000人で設定してください</small>
+        </div>
+
+        <div style="display: flex; gap: 5px; margin-top: 5px;">
+            <label>セーブファイル(.json)からロード</label>
+            <input type="file" id="json-upload" accept=".json">
+            <button onclick="exportToJsonFile()" style="background: #28a745;">JSON保存</button>
+        </div>
+
+
+        <button onclick="startGame()"
+            style="background: #28a745; font-size: 1.2em; font-weight: bold; margin-top: 25px;">
+            承認：ゲームを開始する
+        </button>
+    </div>
+
+    <script>
+        // 画像プレビュー処理
+        // 1. 画像プレビュー処理 (既存)
+        // 画像を縮小して保存する共通処理
+        function processImage(file, callback) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 100; // 100pxあれば十分
+                    const scale = MAX_WIDTH / img.width;
+                    canvas.width = MAX_WIDTH;
+                    canvas.height = img.height * scale;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                    // 画質を0.7(70%)に落として容量を激減させる
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                    callback(compressedDataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        document.getElementById('icon-upload').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                processImage(file, (compressedUrl) => {
+                    document.getElementById('preview').src = compressedUrl;
+                });
+            }
+        });
+
+        // カスタムNPCフィールドの動的生成
+        function addCustomNPCField(data = null) {
+            const id = "npc-" + Date.now() + Math.random().toString(36).substr(2, 5);
+            const defaultIcon = "https://via.placeholder.com/80";
+
+            // 初期値の設定（ロード用）
+            const name = data ? data.name : "";
+            const icon = data ? data.icon : defaultIcon;
+            const eco = data ? data.ideology.economy : 50;
+            const gov = data ? data.ideology.government : 50;
+            const dip = data ? data.ideology.diplomacy : 50;
+
+            const npcHtml = `
+        <div id="${id}" class="custom-npc-card" style="background: #fdfdfd; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ddd; box-shadow: 2px 2px 5px rgba(0,0,0,0.05);">
+            <div style="display: flex; gap: 15px; align-items: start;">
+                <div style="text-align: center;">
+                    <img class="npc-preview" src="${icon}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; border:1px solid #ccc; display:block; margin-bottom:5px;">
+                    <input type="file" accept="image/*" onchange="handleNPCIcon(this, '${id}')" style="display:none;" id="file-${id}">
+                    <label for="file-${id}" style="font-size:0.7em; cursor:pointer; color:#007bff; text-decoration:underline;">画像変更</label>
+                </div>
+                <div style="flex-grow: 1;">
+                    <input type="text" class="npc-name" placeholder="人物名" value="${name}" style="width:100%; font-weight:bold; margin-bottom:10px;">
+                    
+                    <div class="axis-field" style="margin-bottom:8px;">
+                        <div class="axis-label" style="font-size:0.7em;"><span>平等</span><span>資本</span></div>
+                        <input type="range" class="npc-econ" value="${eco}" style="height:15px;">
+                    </div>
+                    <div class="axis-field" style="margin-bottom:8px;">
+                        <div class="axis-label" style="font-size:0.7em;"><span>優しい</span><span>厳しい</span></div>
+                        <input type="range" class="npc-gov" value="${gov}" style="height:15px;">
+                    </div>
+                    <div class="axis-field">
+                        <div class="axis-label" style="font-size:0.7em;"><span>国際</span><span>国家</span></div>
+                        <input type="range" class="npc-dip" value="${dip}" style="height:15px;">
+                    </div>
+                </div>
+                <button onclick="document.getElementById('${id}').remove()" style="background:#ff4757; width:30px; padding:5px; margin:0;">×</button>
+            </div>
+        </div>
+    `;
+            document.getElementById('custom-npc-list').insertAdjacentHTML('beforeend', npcHtml);
+        }
+
+        // NPCごとの画像アップロード処理
+        function handleNPCIcon(input, cardId) {
+            const file = input.files[0];
+            if (file) {
+                processImage(file, (compressedUrl) => {
+                    document.querySelector(`#${cardId} .npc-preview`).src = compressedUrl;
+                });
+            }
+        }
+
+        // データの全取得ロジック（プレイヤー＋全カスタムNPC）
+        function getProfileData() {
+            const npcCards = document.querySelectorAll('.custom-npc-card');
+            const customNPCs = Array.from(npcCards).map(card => ({
+                name: card.querySelector('.npc-name').value || "名もなき政治家",
+                icon: card.querySelector('.npc-preview').src,
+                ideology: {
+                    economy: card.querySelector('.npc-econ').value,
+                    government: card.querySelector('.npc-gov').value,
+                    diplomacy: card.querySelector('.npc-dip').value
+                }
+            }));
+
+            return {
+                name: document.getElementById('leader-name').value,
+                icon: document.getElementById('preview').src,
+                startYear: parseInt(document.getElementById('start-year').value) || 2024,
+                initialNpcCount: parseInt(document.getElementById('npc-count').value) || 5,
+                customNPCs: customNPCs,
+                ideology: {
+                    economy: document.getElementById('econ-axis').value,
+                    government: document.getElementById('gov-axis').value,
+                    diplomacy: document.getElementById('diplomatic-axis').value
+                }
+            };
+        }
+
+        // 3. ブラウザへのセーブ機能 (localStorage)
+        function saveProfile() {
+            const profile = getProfileData();
+            localStorage.setItem('political_game_data', JSON.stringify(profile));
+
+            console.log("JSONデータとしてセーブ:", profile);
+        }
+
+        // 4. ブラウザからのロード機能
+        // JSONファイルを選択して読み込む処理
+        document.getElementById('json-upload').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const profile = JSON.parse(event.target.result);
+
+                    // 取得したJSONデータを各フォームに反映
+                    if (profile.name) document.getElementById('leader-name').value = profile.name;
+                    if (profile.icon) document.getElementById('preview').src = profile.icon;
+                    if (profile.ideology) {
+                        document.getElementById('econ-axis').value = profile.ideology.economy || 50;
+                        document.getElementById('gov-axis').value = profile.ideology.government || 50;
+                        document.getElementById('diplomatic-axis').value = profile.ideology.diplomacy || 50;
+                    }
+
+                    alert("ファイルからプロフィールを読み込みました！");
+                    console.log("インポート成功:", profile);
+                } catch (err) {
+                    alert("JSONファイルの形式が正しくありません。");
+                    console.error("解析エラー:", err);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // 5. JSONファイルとして書き出し（エクスポート）
+        function exportToJsonFile() {
+            const profile = getProfileData();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(profile, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "save_data.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        // ページ読み込み時に自動でロードを実行
+        window.onload = loadProfile;
+
+        function loadProfile() {
+            const rawData = localStorage.getItem('political_game_data');
+            if (!rawData) return;
+            const profile = JSON.parse(rawData);
+
+            // プレイヤーデータの反映
+            if (profile.startYear) document.getElementById('start-year').value = profile.startYear;
+            document.getElementById('leader-name').value = profile.name || "";
+            document.getElementById('preview').src = profile.icon || "https://via.placeholder.com/100";
+            document.getElementById('econ-axis').value = profile.ideology.economy;
+            document.getElementById('gov-axis').value = profile.ideology.government;
+            document.getElementById('diplomatic-axis').value = profile.ideology.diplomacy;
+            document.getElementById('npc-count').value = profile.initialNpcCount;
+
+            // カスタムNPCの復元
+            const listContainer = document.getElementById('custom-npc-list');
+            listContainer.innerHTML = ""; // 一旦クリア
+            if (profile.customNPCs) {
+                profile.customNPCs.forEach(npc => addCustomNPCField(npc));
+            }
+        }
+
+        function startGame() {
+            const name = document.getElementById('leader-name').value;
+
+            // 名前の入力チェック（任意）
+            if (!name) {
+                alert("氏名を入力してください。");
+                return;
+            }
+
+            // 1. 現在の入力内容をLocalStorageにセーブ
+            saveProfile();
+
+            // 2. game.html へ遷移
+            console.log("ロード...");
+            window.location.href = 'game.html';
+        }
+    </script>
+
+</body>
+
+</html>

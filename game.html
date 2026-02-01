@@ -51,6 +51,16 @@
             border-radius: 5px;
         }
 
+        .cabinet-card {
+            background: #9b9b9b;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .cabinet-card text {
+            color: #f1c40f;
+        }
+
         .stat-val {
             font-size: 1.2em;
             font-weight: bold;
@@ -84,6 +94,60 @@
         #npc-list::-webkit-scrollbar-thumb:hover {
             background: #4ecca3;
         }
+
+        /* 通知のコンテナ（右側に固定） */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            /* 下の要素をクリックできるようにする */
+        }
+
+        /* 通知本体 */
+        .toast-card {
+            pointer-events: auto;
+            /* カード内はクリック可能に */
+            width: 280px;
+            background: rgba(44, 62, 80, 0.95);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            border-left: 5px solid #3498db;
+            position: relative;
+            animation: slideInRight 0.3s ease-out;
+            font-size: 0.9em;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-close {
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            cursor: pointer;
+            font-size: 1.2em;
+            opacity: 0.7;
+        }
+
+        .toast-close:hover {
+            opacity: 1;
+        }
     </style>
 </head>
 
@@ -108,11 +172,21 @@
                 <span>🗳️ 次の大統領選挙まで: <strong id="election-days-left">1460</strong> 日</span>
                 <button onclick="openElectionHistory()"
                     style="background: #3498db; border: none; padding: 5px 10px; color: white; border-radius: 4px; cursor: pointer; font-size: 0.8em;">選挙履歴・分析</button>
+                <button onclick="openPartyMenu()"
+                    style="background: #3498db; border: none; padding: 5px 10px; color: white; border-radius: 4px; cursor: pointer; font-size: 0.8em;">党メニュー</button>
             </div>
             <div style="width: 100%; background: #2c3e50; height: 10px; border-radius: 5px; margin-top: 5px;">
                 <div id="election-progress"
                     style="width: 0%; background: #f1c40f; height: 100%; border-radius: 5px; transition: width 0.3s;">
                 </div>
+            </div>
+        </div>
+
+        <div class="cabinet-card" style="margin-top: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="color:#f1c40f; text-align:center;">🗳️大統領の状況:</h2>
+                <button onclick="showMilitaryModal();">軍の状況</button>
+                <button onclick="showCabinetAnnouncement();">大統領の部下</button>
             </div>
         </div>
 
@@ -244,19 +318,42 @@
 
 
 <script>
-    let presidentElect = null; // 次期当選者
     let president = null;
+
+    let currentCabinet = {
+        vicePresident: null,    // 副大統領
+        stateSecretary: null,   // 国務長官
+        justiceSecretary: null, // 司法長官
+        defenseSecretary: null, // 国防長官
+        commerceSecretary: null,// 商務長官
+        homelandSecretary: null // 国土開発長官
+    };
+
+    // 役職名と説明のマッピング
+    const CABINET_ROLES = {
+        vicePresident: "副大統領",
+        stateSecretary: "国務長官",
+        justiceSecretary: "司法長官",
+        defenseSecretary: "国防長官",
+        commerceSecretary: "商務長官",
+        homelandSecretary: "国土開発長官"
+    };
+    let presidentElect = null; // 次期当選者
+    let presidenttermcount = null;
     let gameDate = new Date(2026, 0, 1); // 開始日
 
     const lastNames = ["佐藤", "鈴木", "高橋", "田中", "伊藤", "渡辺", "山本", "中村", "小林", "加藤", "吉田", "山田", "佐々木", "山口", "松本",
         "ジョン", "アル", "ハーバード", "ハーバート", "ドナルド", "ジョー", "ジョセフ", "ジョージ", "ゲオルク", "アドルフ", "アロイス", "マーティン", "ウィリアム", "フランク",
         "フランクリン", "カルヴィン", "カルビン", "ユスフ", "ヨセフ", "ヨセープ", "レシプ", "レシップ", "ジェームズ", "ジェームス", "ジェイムズ", "アーサー",
         "チャールズ", "ウィンストン", "ウィントン", "ミラード", "ザカリー", "アンドリュー", "アンドルー", "李", "キア", "リシ", "ボリス", "ボブ", "ビル", "グロバー", "グロヴァー"
-        , "ハリー", "ジョンソン", "ジョーン", "ショーン", "ション", "フランキン", "アルフレッド"
+        , "ハリー", "ジョンソン", "ジョーン", "ショーン", "ション", "フランキン", "アルフレッド", "石井", "石田", "石川", "ヘンリー", "ヒューバート", "ニコラス",
+        "ジョライ", "ショライ", "ホレイショ", "ホーレイ", "ホレイ", "岩井", "岩崎", "岩田", "斎藤", "齋藤", "渕上", "淵上", "田山"
     ];
     const firstNames = ["太郎", "次郎", "健一", "昭夫", "和也", "浩司", "悟", "直樹", "一郎", "進", "道夫", "正", "秀樹", "英二", "雄太",
         "アダム", "アダムズ", "アダムス", "ジェファーソン", "パーティー", "パワード", "パート", "スミス", "ワイルド", "マクドナルド", "ドゥーイ", "ドーイ", "スコット", "いっぺい", "スカット",
-        "ボソン", "ポズン", "明夫", "あきお", "クーリッジ", "クーリー", "栗島", "シゲル", "茂", "しげお", "しげた"
+        "ボソン", "ポズン", "明夫", "あきお", "クーリッジ", "クーリー", "栗島", "シゲル", "茂", "しげお", "しげた", "ジャクソン", "ジャックソン",
+        "アデム", "ジョーイ", "ヘンフリー", "ヘフリー", "マクカバン", "マクガバン", "マクバン", "マック", "ダナス", "ガナス", "マナス", "ラナス",
+        "ラペス", "ジョンソン", "ジョン", "バーナー", "バーナード", "バーナーズ"
     ];
     const specialMiddles = ["・D・", "・フォン・", "・デ・", "・ヴァン・"];
 
@@ -266,6 +363,7 @@
     // 二つを合体させて最強のミドルネームリストを作る
     const middleNames = [...specialMiddles, ...alphabetMiddles];
     let electionCountdown = 1;
+    let profile = null;
     window.onload = function () {
         // 1. LocalStorageからデータを取得
         const savedData = localStorage.getItem('political_game_data');
@@ -276,7 +374,7 @@
             return;
         }
 
-        const profile = JSON.parse(savedData);
+        profile = JSON.parse(savedData);
 
         npcs = []; // 配列を初期化
 
@@ -290,6 +388,9 @@
                     id: "custom-" + Math.random().toString(36).substr(2, 9),
                     name: c.name,
                     icon: c.icon,
+                    isPlayer: false,
+                    termCount: 0,
+                    military: null,
                     ideology: {
                         economy: parseInt(c.ideology.economy),
                         government: parseInt(c.ideology.government),
@@ -356,6 +457,173 @@
         });
     };
 
+    let annualPoliticsLog = {
+        invited: [],
+        expelled: []
+    };
+
+    function resetAnnualLog() {
+        annualPoliticsLog = {
+            invited: [],
+            expelled: []
+        };
+    }
+    /**
+ * 政党の日常的なアクション（招待・除名・統合）を処理する
+ */
+    function processDailyPartyAction() {
+        if (Math.random() > 0.01) return;
+
+        const activeParties = parties.filter(p => p.active);
+        if (activeParties.length === 0) return;
+
+        const party = activeParties[Math.floor(Math.random() * activeParties.length)];
+        const rand = Math.random();
+
+        if (rand < 0.50) { // 招待 (60%→50%に微減)
+            const target = npcs[Math.floor(Math.random() * npcs.length)];
+
+            // 修正：既に同じ党なら何もしない
+            if (target.partyId === party.id) return;
+
+            // 修正：移籍処理（前の党から脱退させる）
+            if (target.partyId) {
+                const oldParty = parties.find(p => p.id === target.partyId);
+                if (oldParty) oldParty.members = oldParty.members.filter(m => m.id !== target.id);
+            }
+
+            target.partyId = party.id;
+            if (!party.members.some(m => m.id === target.id)) {
+                party.members.push(target);
+            }
+            showToast(`🤝 政党移籍: ${party.name}`, `${target.name} 氏が党に加わりました。`, party.color);
+            annualPoliticsLog.invited.push({ partyName: party.name, personName: target.name });
+
+        } else if (rand < 0.80) { // 除名 (30%)
+            // 修正：メンバーが3人以上、かつ「代表（party.leader）以外」から選ぶ
+            const candidatesForExpulsion = party.members.filter(m => m.id !== party.leader.id);
+
+            if (candidatesForExpulsion.length > 0) {
+                const target = candidatesForExpulsion[Math.floor(Math.random() * candidatesForExpulsion.length)];
+
+                // 党のメンバーリストから削除
+                party.members = party.members.filter(m => m.id !== target.id);
+                if (!target.isPlayer) target.partyId = null;
+
+                showToast(`🚫 政党除名: ${party.name}`, `${target.name} 氏が党から追放されました。`, "#e74c3c");
+                annualPoliticsLog.expelled.push({ partyName: party.name, personName: target.name });
+            }
+
+        } else if (rand < 0.90) { // 統合 (10%にアップ)
+            const otherParty = activeParties.find(p => p.id !== party.id);
+            if (otherParty) {
+                const aff = calculateAffinity(party.leader.ideology, otherParty.leader.ideology);
+                const mergeChance = 0.1 + (aff / 500); // 確率を底上げ
+
+                if (Math.random() < mergeChance) {
+                    const oldName = otherParty.name;
+                    // 二重登録を防ぎつつ合流
+                    otherParty.members.forEach(m => {
+                        if (!party.members.some(pm => pm.id === m.id)) {
+                            party.members.push(m);
+                            if (!m.isPlayer) m.partyId = party.id;
+                        }
+                    });
+                    otherParty.active = false;
+                    otherParty.members = [];
+                    showToast(`🎆 政党統合！`, `${oldName} が ${party.name} へ合流しました。`, "#f1c40f");
+                }
+            }
+
+        } else { // 解散 (10%にアップ)
+            if (party.active && !party.leader.isPlayer) {
+                // 解散しやすさをアップ：5人未満なら30%、多くても10%で解散
+                const dissolveChance = party.members.length < 5 ? 0.30 : 0.10;
+
+                if (Math.random() < dissolveChance) {
+                    const oldName = party.name;
+                    const oldColor = party.color;
+                    const memberCount = party.members.length;
+
+                    party.members.forEach(m => { if (!m.isPlayer) m.partyId = null; });
+                    party.active = false;
+                    party.dissolvedDate = new Date(gameDate);
+                    party.members = [];
+
+                    setGameSpeed(0);
+                    const dissolveHtml = `
+
+                    <div style="text-align:center;">
+
+                        <div style="margin: 20px auto; width: 80px; height: 80px; background: ${oldColor}; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 4px solid #ccc; position: relative;">
+
+                            <span style="font-size: 50px; color: white; position: absolute;">✕</span>
+
+                        </div>
+
+                        <h2 style="color: #e74c3c;">${oldName} 解散</h2>
+
+                        <p>本日、<strong>${oldName}</strong> はその歴史に幕を閉じました。</p>
+
+                        <p style="font-size: 0.9em; color: #666;">所属していた ${memberCount} 名の議員は全員無所属となりました。</p>
+
+                    </div>
+
+                `;
+
+                    openUniversalModal("🏛️ 政党解散のお知らせ", dissolveHtml, [
+
+                        { text: "確認", cb: () => { closeUniversalModal(); setGameSpeed(1); }, color: "#34495e" }
+
+                    ]);
+
+                    annualPoliticsLog.expelled.push({ partyName: oldName, personName: `【党自体が解散】` });
+                }
+            }
+        }
+    }
+
+    function getContrastYIQ(hexcolor) {
+        if (!hexcolor) return 'white';
+        hexcolor = hexcolor.replace("#", "");
+        const r = parseInt(hexcolor.substr(0, 2), 16);
+        const g = parseInt(hexcolor.substr(2, 2), 16);
+        const b = parseInt(hexcolor.substr(4, 2), 16);
+        const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        return (yiq >= 128) ? 'black' : 'white';
+    }
+    // 通知を表示する汎用関数
+    function showToast(title, message, color = "#3498db") {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-card';
+        // 背景色と、文字の読みやすさを自動調整
+        toast.style.backgroundColor = color;
+        toast.style.color = getContrastYIQ(color);
+        toast.style.borderLeft = "none"; // 色つきカードにするのでボーダーは不要
+
+        toast.innerHTML = `
+        <span class="toast-close" style="color:${getContrastYIQ(color)}">&times;</span>
+        <div style="font-weight: bold; margin-bottom: 3px; font-size: 1em;">${title}</div>
+        <div style="font-size: 0.85em; opacity: 0.9;">${message}</div>
+    `;
+
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.onclick = () => {
+            toast.style.animation = "slideInRight 0.3s ease-in reverse forwards";
+            setTimeout(() => toast.remove(), 300);
+        };
+
+        setTimeout(() => { if (toast.parentElement) closeBtn.click(); }, 5000);
+        container.appendChild(toast);
+    }
+
     // 汎用系 //
     /**
      * @param {string} title - モーダルのタイトル
@@ -411,11 +679,15 @@
     function createRandomNPC(name) {
         // ランダムなシード文字列を生成
         const randomSeed = Math.random().toString(36).substring(7);
+        const icons = ["adventurer", "adventurer-neutral", "avataaars", "avataaars-neutral", "big-ears", "big-ears-neutral", "personas", "thumbs", "toon-head", "fun-emoji", "pixel-art", "pixel-art-neutral"];
+        const icons1 = icons[Math.floor(Math.random() * icons.length)];
+
         return {
             id: Date.now() + Math.random(), // 💥 固有のIDを追加
             name: name,
+            termCount: 0,
             // DiceBear APIを使用 (seedをランダムに)
-            icon: `https://api.dicebear.com/9.x/personas/svg?seed=${randomSeed}`,
+            icon: `https://api.dicebear.com/9.x/${icons1}/svg?seed=${randomSeed}`,
             ideology: {
                 economy: Math.floor(Math.random() * 101),
                 government: Math.floor(Math.random() * 101),
@@ -492,9 +764,8 @@
     function getIdeologyTitle(ideology) {
         const { economy: econ, government: gov } = ideology;
         let title = "中道";
-        if (gov > 70 && econ > 70) title = "新自由主義"; // 元：金じゃんじゃん
-        if (gov < 30 && econ < 30) title = "アナーキズム"; // 元：平等主義の過激派
-        if (gov > 70 && econ < 30) title = "権威主義";   // 元：独裁者
+        if (gov < 30 && econ < 30) title = "平等主義の過激派"; // 元：平等主義の過激派
+        if (gov > 70 && econ < 30) title = "独裁者";   // 元：独裁者
         if (gov < 30 && econ > 70) title = "自由主義"; // 元：自由主義者
 
         // さらに細かく分岐させることも可能です
@@ -568,6 +839,7 @@
         const day = gameDate.getDate();
         document.getElementById('display-date').innerText = `${year}年 ${month}月 ${day}日`;
     }
+    let dayCounter = 0
 
     // ゲームスピードを変更する関数
     function setGameSpeed(speed) {
@@ -582,6 +854,20 @@
             gameTimer = setInterval(() => {
                 gameDate.setDate(gameDate.getDate() + 1);
                 updateDateDisplay();
+                dayCounter++;
+
+                // --- 【100日周期】軍の入退隊（これは重い＆設定通り200日判定があるので100日毎でOK） ---
+                if (dayCounter % 100 === 0) {
+                    processMilitaryLifeCycle();
+                }
+
+                // --- 【毎日判定】政党アクション（内部に1%などの確率があるため、毎日チャンスを与える） ---
+                processDailyPartyAction();
+
+                // --- 【毎日判定】新党結成（これも内部に確率や条件があるなら毎日でOK） ---
+                checkPartyCreationEvent();
+
+                // --- 【毎日判定】選挙管理 ---
                 updateElectionStatus();
 
                 // 毎月1日に何かイベントを起こすならここ
@@ -634,10 +920,64 @@
         }
     }
 
+    // 閣僚
+    function appointCabinet(newPresident) {
+        // 1. 全NPCとプレイヤーを候補者としてリスト化（大統領本人は除く）
+        let candidates = [...npcs];
+        if (typeof player !== 'undefined') {
+            candidates.push({ ...player, isPlayer: true, id: "player" });
+        }
+        candidates = candidates.filter(c => c.id !== newPresident.id);
+
+        // 2. 内閣を一度リセット
+        Object.keys(currentCabinet).forEach(key => currentCabinet[key] = null);
+
+        // 3. 相性が良い順にソート
+        candidates.sort((a, b) => {
+            const affA = calculateAffinity(newPresident.ideology, a.ideology);
+            const affB = calculateAffinity(newPresident.ideology, b.ideology);
+            return affB - affA;
+        });
+
+        // 4. 各ポストに割り当て
+        let assignedCount = 0;
+        const roles = Object.keys(currentCabinet);
+
+        roles.forEach(role => {
+            if (candidates.length > 0) {
+                // 国防長官 (defenseSecretary) の特殊ルール
+                if (role === "defenseSecretary") {
+                    // 軍事的な思想(gov > 70)を持つ人を優先的に探す
+                    const militaryIndex = candidates.findIndex(c => c.ideology.gov > 70);
+                    if (militaryIndex !== -1) {
+                        currentCabinet[role] = candidates.splice(militaryIndex, 1)[0];
+                        return;
+                    }
+                }
+
+                // 通常の任命（相性順）
+                // 相性が一定以下（例: 30未満）なら「空席」にする
+                const topCandidate = candidates[0];
+                if (calculateAffinity(newPresident.ideology, topCandidate.ideology) >= 30) {
+                    currentCabinet[role] = candidates.shift();
+                }
+            }
+        });
+    }
+
     function holdInauguration() {
         setGameSpeed(0); // 時間を止める
 
         let farewellMessage = "";
+        let isReelection = false;
+
+        // 前任者が存在し、かつ今回の当選者と同じ人物なら「再選」
+        if (president && president.name === presidentElect.name) {
+            isReelection = true;
+            presidenttermcount += 1;
+        } else {
+            presidenttermcount = 1;
+        };
 
         if (president) {
             // 前大統領と新大統領の思想相性を計算
@@ -657,7 +997,23 @@
 
         const isPlayer = presidentElect.isPlayer; // プレイヤーが当選したか
         const title = isPlayer ? "あなたの就任式" : `${presidentElect.name}大統領就任式`;
-        let html = `
+        let html
+        if (isReelection) {
+            html = `
+        <div style="background:#1a2a6c; color:white; padding:30px; border-radius:10px; text-align:center; border: 5px solid #f1c40f;">
+            <h1 style="margin-bottom:20px;">🏛️${presidenttermcount}期目の開始と就任式</h1>
+            <img src="${presidentElect.icon}" style="width:120px; height:120px; border-radius:50%; border:5px solid white; background:white;">
+            <h2 style="margin-top:20px;">${presidentElect.name}</h2>
+            <p style="font-style:italic; font-size:1.1em; margin:20px 0;">
+                私は大統領として、全力を尽くすことを誓います。
+            </p>
+            <div style="font-size:0.9em; color:#bdc3c7;">
+                ${gameDate.getFullYear()}年1月20日 正午
+            </div>
+        </div>
+    `;
+        } else {
+            html = `
         <div style="background:#1a2a6c; color:white; padding:30px; border-radius:10px; text-align:center; border: 5px solid #f1c40f;">
             <h1 style="margin-bottom:20px;">🏛️就任式の日</h1>
             <img src="${presidentElect.icon}" style="width:120px; height:120px; border-radius:50%; border:5px solid white; background:white;">
@@ -670,7 +1026,8 @@
             </div>
         </div>
     `;
-        if (president) {
+        }
+        if (president && !isReelection) {
             html += `<div style="background:#1a2a6c; color:white; padding:30px; border-radius:10px; text-align:center; border: 5px solid #f1c40f;">
             <h1 style="margin-bottom:20px; font-size:1.5em;">🏛️就任式の日</h1>
             
@@ -686,17 +1043,100 @@
 
         openUniversalModal(title, html, [
             {
-                text: "新政権、始動",
+                text: "おめでとう。",
                 cb: () => {
-                    // ここで正式に大統領を更新する
-                    currentPresident = presidentElect;
-                    presidentElect = null; // クリア
-                    closeUniversalModal();
-                    setGameSpeed(1);
+                    presidentElect = null;
+                    appointCabinet(president); // 内閣任命実行
+                    showCabinetAnnouncement(); // 内閣発表画面へ
                 },
                 color: "#f1c40f"
             }
         ]);
+    }
+    function showCabinetAnnouncement() {
+        if (!president) {
+            openUniversalModal("申し訳ございません。", "まだ正式な部下の発表はされていません。", [
+                {
+                    text: "早くしろ！",
+                    cb: () => {
+                        closeUniversalModal();
+                    },
+                }
+            ]);
+            return
+        }
+        const stats = getMilitaryStats(); // 軍事情報（国防長官の判定用など）
+
+        // レイアウト用のヘルパー
+        const getPersonUI = (person, roleName, size = "normal") => {
+            const isVacant = !person;
+            const isPlayer = person?.isPlayer || person?.id === "player";
+            const name = isVacant ? "（空席）" : person.name;
+            const icon = isVacant ? "https://via.placeholder.com/100?text=?" : person.icon;
+
+            // サイズ設定
+            const dim = size === "large" ? 120 : (size === "medium" ? 80 : 60);
+            const fontSize = size === "large" ? "1.5em" : (size === "medium" ? "1.1em" : "0.9em");
+            const borderColor = isPlayer ? "#f1c40f" : "#fff";
+
+            return `
+            <div style="text-align:center; padding:10px; transition: transform 0.3s;">
+                <div style="position:relative; display:inline-block;">
+                    <img src="${icon}" style="width:${dim}px; height:${dim}px; border-radius:50%; border:3px solid ${borderColor}; box-shadow: 0 4px 15px rgba(0,0,0,0.5); background:#2c3e50;">
+                    ${isPlayer ? `<div style="position:absolute; bottom:0; right:0; background:#f1c40f; color:#000; font-size:10px; padding:2px 6px; border-radius:10px; font-weight:bold;">YOU</div>` : ''}
+                </div>
+                <div style="margin-top:8px;">
+                    <div style="font-size:0.7em; color:#bdc3c7; text-transform:uppercase; letter-spacing:1px;">${roleName}</div>
+                    <div style="font-size:${fontSize}; font-weight:bold; color:${isVacant ? '#e74c3c' : '#fff'};">${name}</div>
+                </div>
+            </div>
+        `;
+        };
+
+        const html = `
+    <div style="background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d); padding:2px; border-radius:15px;">
+        <div style="background:#1a1a2e; color:white; padding:30px; border-radius:13px; font-family:'Segoe UI', sans-serif;">
+            
+            <h2 style="text-align:center; margin-bottom:30px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">新政権・閣僚名簿</h2>
+
+            <div style="display:flex; justify-content:center; margin-bottom:20px;">
+                ${getPersonUI(president, "大統領", "large")}
+            </div>
+
+            <div style="display:flex; justify-content:center; margin-bottom:40px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:20px;">
+                ${getPersonUI(currentCabinet.vicePresident, "副大統領", "medium")}
+            </div>
+
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap:20px; justify-items:center;">
+                ${getPersonUI(currentCabinet.stateSecretary, "国務長官")}
+                ${getPersonUI(currentCabinet.defenseSecretary, "国防長官")}
+                ${getPersonUI(currentCabinet.justiceSecretary, "司法長官")}
+                ${getPersonUI(currentCabinet.commerceSecretary, "商務長官")}
+                ${getPersonUI(currentCabinet.homelandSecretary, "国土開発長官")}
+            </div>
+
+            <div style="margin-top:30px; padding:15px; background:rgba(255,255,255,0.05); border-radius:8px; font-size:0.85em; line-height:1.6; border-left:4px solid #f1c40f;">
+                <strong>📜アドバイス:</strong><br>
+                ${currentCabinet.stateSecretary.name}「${generateCabinetAnalysis()}」
+            </div>
+        </div>
+    </div>
+    `;
+
+        openUniversalModal("閣僚たち", html, [
+            { text: "了解", cb: () => { closeUniversalModal(); setGameSpeed(1); }, color: "#4ecca3" }
+        ]);
+    }
+
+    // 内閣の構成に基づいた分析テキスト（おまけ）
+    function generateCabinetAnalysis() {
+        const emptyCount = Object.values(currentCabinet).filter(v => !v).length;
+        if (emptyCount >= 3) return "空席が目立つ異常事態です。政権運営の麻痺が懸念されます。";
+
+        const isDefenseMilitary = currentCabinet.defenseSecretary?.ideology.gov > 70;
+        if (isDefenseMilitary) return "国防長官が強いです、軍部との連携を重視しています。";
+
+        return "バランスが取れています、思想の近い閣僚たちが大統領を支えます。";
     }
 
     function runElection() {
@@ -747,6 +1187,7 @@
                 name: profile.name,
                 icon: profile.icon,
                 isPlayer: true,
+                termCount: 0,
                 ideology: profile.ideology,
                 votes: 0,
                 supporters: []
@@ -788,28 +1229,39 @@
             };
         });
     }
-
     function finalizeElection(candidates, playerVoteTargetId) {
         closeUniversalModal();
         document.getElementById('voting-modal').style.display = 'none';
 
-        // 1. NPCたちの自動投票（先行者補正あり）
+        // 支持者の詳細を一時的に格納する配列を用意
+        candidates.forEach(cand => {
+            cand.temp_supporters_info = [];
+        });
+
+        // 1. NPCたちの自動投票
         npcs.forEach(npc => {
             let bestAffinity = -1;
             let voteTo = null;
 
             candidates.forEach(cand => {
                 const aff = calculateAffinity(npc.ideology, cand.ideology);
-                const priorityBonus = (candidates.indexOf(cand) === 0) ? 8 : 0; // 筆頭候補への補正
+                const priorityBonus = (candidates.indexOf(cand) === 0) ? 8 : 0;
 
                 if ((aff + priorityBonus) > bestAffinity) {
                     bestAffinity = aff + priorityBonus;
                     voteTo = cand;
                 }
             });
+
             if (voteTo) {
                 voteTo.votes++;
                 voteTo.supporters.push(npc.icon);
+                // 【重要】支持者の詳細（名前、アイコン、所属政党ID）を記録
+                voteTo.temp_supporters_info.push({
+                    name: npc.name,
+                    icon: npc.icon,
+                    partyId: npc.partyId
+                });
             }
         });
 
@@ -817,20 +1269,45 @@
         const myChoice = candidates.find(c => c.id === playerVoteTargetId);
         if (myChoice) {
             myChoice.votes++;
-            const profile = JSON.parse(localStorage.getItem('political_game_data'));
-            myChoice.supporters.push(profile.icon);
+
+            // localStorageから最新のプロフィール（所属政党込み）を取得
+            profile = JSON.parse(localStorage.getItem('political_game_data')) || {};
+            myChoice.supporters.push(profile.icon || "");
+
+            // profile.partyId があればそれを使う。なければ無所属。
+            let pPartyId = profile.partyId || "independents";
+
+            myChoice.temp_supporters_info.push({
+                name: profile.name || "プレイヤー",
+                icon: profile.icon || "",
+                partyId: pPartyId
+            });
         }
 
-        // 3. 結果表示
+        // 3. 結果の整理と履歴への保存（スナップショット化）
         candidates.sort((a, b) => b.votes - a.votes);
         presidentElect = candidates[0];
 
-        electionHistory.push({
+        // 履歴には「その瞬間の値」をディープコピーして保存する
+        const historyEntry = {
             date: new Date(gameDate),
             winner: presidentElect,
-            all: candidates,
-            inaugurated: false // まだ就任していないフラグ
-        });
+            totalVotes: npcs.length + 1,
+            all: candidates.map(cand => ({
+                id: cand.id,
+                name: cand.name,
+                icon: cand.icon,
+                partyId: cand.partyId,
+                votes: cand.votes,
+                isPlayer: (cand.id === "player" || cand.isPlayer === true),
+                supporters: [...cand.supporters], // アイコン配列をコピー
+                supporters_data: [...cand.temp_supporters_info] // 【重要】詳細データをコピー保存
+            })),
+            inaugurated: false
+        };
+
+        electionHistory.push(historyEntry);
+
         showElectionResult(candidates);
     }
 
@@ -1045,62 +1522,541 @@
         );
     }
 
-    function showElectionDetail(historyIndex) {
-        const record = electionHistory[historyIndex];
-        const totalVotes = record.all.reduce((sum, c) => sum + c.votes, 0);
-        const dateStr = `${record.date.getFullYear()}年${record.date.getMonth() + 1}月${record.date.getDate()}日`;
+    function getPartyInfo(partyId) {
+        const party = parties.find(p => p.id === partyId);
+        return party ? { name: party.name, color: party.color } : { name: "無所属", color: "#95a5a6" };
+    }
 
-        // Wikipedia Infobox風のHTML構築
+    /**
+     * 選挙の個別詳細を表示する
+     * @param {number} index - electionHistoryの添字
+     */
+    function showElectionDetail(index) {
+        const record = electionHistory[index];
+        if (!record || !record.all) return;
+
+        const totalVotes = record.totalVotes || record.all.reduce((sum, c) => sum + c.votes, 0) || 1;
+        const dateStr = record.date;
+
         let html = `
-                            <div style="background:#f8f9fa; color:#202122; padding:20px; border-radius:5px; font-family: sans-serif;">
-                                <div style="text-align:center; border-bottom:1px solid #a2a9b1; margin-bottom:10px; padding-bottom:10px;">
-                                    <h2 style="margin:0; font-size:1.2em;">第 ${historyIndex + 1} 期 大統領選挙 詳細</h2>
-                                    <small>${dateStr} 実施</small>
-                                </div>
+        <div style="background:#f8f9fa; color:#202122; padding:20px; border-radius:5px; font-family: sans-serif; max-height:80vh; overflow-y:auto;">
+            <div style="text-align:center; border-bottom:1px solid #a2a9b1; margin-bottom:10px; padding-bottom:10px;">
+                <h2 style="margin:0; font-size:1.2em;">第 ${index + 1} 期 大統領選挙 詳細分析</h2>
+                <small>${dateStr} 実施</small>
+            </div>
 
-                                <table style="width:100%; border-collapse: collapse; text-align:center; table-layout: fixed;">
-                                    <tr>
-                                        ${record.all.slice(0, 3).map((cand, i) => `
-                        <td style="padding:5px; vertical-align: top;">
-                            <div style="font-size:0.8em; font-weight:bold;">${i === 0 ? '【当選】' : '候補者'}</div>
-                            <img src="${cand.icon}" style="width:80px; height:80px; border-radius:50%; background:#eaecf0; border:1px solid #a2a9b1; margin:5px 0;">
-                            <div style="font-weight:bold; height:2.4em; overflow:hidden;">${cand.name}</div>
-                            <div style="background:${i === 0 ? '#4ecca3' : '#3498db'}; color:white; padding:2px; margin:5px 0; font-size:0.9em;">
-                                ${((cand.votes / totalVotes) * 100).toFixed(1)}%
-                            </div>
-                            <div style="font-size:1.1em; font-weight:bold;">${cand.votes} 票</div>
-                        </td>
-                    `).join('')}
-                                    </tr>
-                                </table>
+            <table style="width:100%; border-collapse: collapse; text-align:center; table-layout: fixed; margin-bottom:20px;">
+                <tr>
+                    ${record.all.slice(0, 3).map((cand, i) => {
+            const party = getPartyInfo(cand.partyId);
+            const percentage = ((cand.votes / totalVotes) * 100).toFixed(1);
+            return `
+                        <td style="padding:5px; vertical-align: top; border-bottom: 4px solid ${party.color};">
+                            <div style="font-size:0.75em; font-weight:bold; color:#555;">${i === 0 ? '🏆 当選' : '候補者'}</div>
+                            <div style="background:${party.color}; color:${getContrastYIQ(party.color)}; font-size:0.7em; padding:2px 5px; border-radius:3px; display:inline-block; margin-bottom:5px;">${party.name}</div>
+                            <img src="${cand.icon}" style="width:60px; height:60px; border-radius:50%; border:2px solid ${party.color}; display:block; margin:0 auto; background:white;">
+                            <div style="font-weight:bold; margin-top:5px; font-size:0.85em;">${cand.name}</div>
+                            <div style="font-size:1.1em; font-weight:bold; margin-top:3px;">${cand.votes} <span style="font-size:0.6em;">票</span></div>
+                            <div style="font-size:0.8em; color:#666;">(${percentage}%)</div>
+                        </td>`;
+        }).join('')}
+                </tr>
+            </table>
 
-                                <div style="margin-top:20px; border-top:1px solid #a2a9b1; padding-top:10px;">
-                                    <h3 style="font-size:0.9em; border-bottom:1px solid #eaecf0;">📊 投票者分析（支持層アイコン）</h3>
-                                    <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;">
-                                        ${record.all.slice(0, 3).map(cand => `
-                        <div style="flex:1; min-width:80px; background:#fff; border:1px solid #c8ccd1; padding:5px; border-radius:3px;">
-                            <small style="display:block; border-bottom:1px solid #eee;">${cand.name.split(' ')[0]}派</small>
-                            <div style="display:flex; flex-wrap:wrap; gap:2px; margin-top:5px;">
-                                ${cand.supporters.map(sIcon => `<img src="${sIcon}" style="width:18px; height:18px; border-radius:50%;">`).join('')}
-                            </div>
+            <h3 style="font-size:0.9em; border-left:4px solid #34495e; padding-left:8px; margin-bottom:15px;">📊 候補者別・支持政党の内訳分析</h3>
+            <div style="display:flex; flex-direction:column; gap:15px;">
+                ${record.all.slice(0, 3).map(cand => {
+            const party = getPartyInfo(cand.partyId);
+            const supData = cand.supporters_data || [];
+
+            // --- 政党ごとの票数を集計 ---
+            const partyStats = {};
+            supData.forEach(s => {
+                const pName = getPartyInfo(s.partyId).name;
+                partyStats[pName] = (partyStats[pName] || 0) + 1;
+            });
+
+            // 票数が多い順にソート
+            const sortedParties = Object.entries(partyStats).sort((a, b) => b[1] - a[1]);
+
+            return `
+                    <div style="background:#fff; border:1px solid #c8ccd1; border-left: 8px solid ${party.color}; padding:12px; border-radius:4px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <strong style="font-size:0.9em;">${cand.name} への投票内訳</strong>
+                            <span style="font-size:0.75em; color:#666;">総支持者: ${supData.length}名</span>
                         </div>
-                    `).join('')}
-                                    </div>
-                                </div>
 
-                                <div style="margin-top:15px; font-size:0.75em; color:#54595d; line-height:1.4;">
-                                    <p>注記: この選挙結果は自動集計に基づいています。
-                                        総得票数: ${totalVotes}票 / 棄権: なし</p>
-                                </div>
-                            </div>
+                        <div style="display:flex; width:100%; height:12px; border-radius:6px; overflow:hidden; background:#eee; margin-bottom:10px;">
+                            ${sortedParties.map(([pName, count]) => {
+                // 集計対象の政党の色を取得
+                const pColor = parties.find(p => p.name === pName)?.color || "#95a5a6";
+                return `<div style="width:${(count / supData.length * 100)}%; background:${pColor};" title="${pName}: ${count}票"></div>`;
+            }).join('')}
+                        </div>
+
+                        <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                            ${sortedParties.map(([pName, count]) => {
+                const pColor = parties.find(p => p.name === pName)?.color || "#95a5a6";
+                const pRatio = ((count / supData.length) * 100).toFixed(1);
+                return `
+                                <div style="font-size:0.7em; display:flex; align-items:center; gap:4px;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background:${pColor};"></span>
+                                    <span style="font-weight:bold;">${pName}:</span> ${pRatio}% 
+                                    <span style="color:#888;">(${count}人)</span>
+                                </div>`;
+            }).join('')}
+                        </div>
+
+                        <div style="display:flex; flex-wrap:wrap; gap:3px; margin-top:12px; padding-top:8px; border-top:1px dashed #eee;">
+                            ${supData.map(s => {
+                const sParty = getPartyInfo(s.partyId);
+                return `<img src="${s.icon}" title="${s.name} (${sParty.name})" style="width:18px; height:18px; border-radius:50%; border:1.5px solid ${sParty.color}; background:#f0f0f0;">`;
+            }).join('')}
+                        </div>
+                    </div>`;
+        }).join('')}
+            </div>
+
+            <div style="margin-top:20px; font-size:0.7em; color:#54595d; line-height:1.4; background:#eee; padding:10px; border-radius:4px;">
+                <strong>💡 分析のヒント:</strong><br>
+                候補者自身の所属政党以外からの％が高い場合、他党からの「票の流入」が起きていることを示します。これが高い候補者は、思想とか関係なく支持される「英雄」の可能性があります。
+            </div>
+        </div>
     `;
 
-        // 汎用モーダルを起動！
-        openUniversalModal(
-            "Wikipedia: 選挙アーカイブ",
-            html,
-            [{ text: "アーカイブを閉じる", cb: closeUniversalModal, color: "#34495e" }]
-        );
+        openUniversalModal("Wikipedia: 選挙アーカイブ", html, [
+            { text: "アーカイブを閉じる", cb: closeUniversalModal, color: "#34495e" }
+        ]);
+    }
+    // 政党 //
+    let parties = [];
+
+    // 政党の初期生成（AI/ランダム）
+    function createParty(name, color, leader) {
+        const party = {
+            id: "party-" + Date.now() + Math.random().toString(36).substr(2, 5),
+            name: name,
+            color: color,
+            leader: leader, // NPCオブジェクト
+            members: leader ? [leader] : [], // 初期メンバー
+            active: true, // 現存フラグ
+            foundedDate: new Date(gameDate),
+            dissolvedDate: null,
+        };
+        parties.push(party);
+        return party;
+    }
+    function openPartyMenu() {
+        const activeParties = parties.filter(p => p.active);
+        const dissolvedParties = parties.filter(p => !p.active);
+
+        let html = `
+        <div style="max-height: 70vh; overflow-y: auto; text-align: left;">
+            <h3 style="border-left: 5px solid #4ecca3; padding-left: 10px;">現存する政党</h3>
+            <div id="active-party-list" style="display: grid; gap: 10px; margin-bottom: 20px;">
+                ${activeParties.map(p => renderPartyCard(p)).join('')}
+            </div>
+
+            <h3 style="border-left: 5px solid #95a5a6; padding-left: 10px; color: #7f8c8d;">歴史的な政党（消滅）</h3>
+            <div id="dissolved-party-list" style="display: grid; gap: 10px; opacity: 0.7;">
+                ${dissolvedParties.length > 0 ? dissolvedParties.map(p => renderPartyCard(p)).join('') : "<p>なし</p>"}
+            </div>
+        </div>
+    `;
+
+        openUniversalModal("政党ポータル", html, [
+            { text: "閉じる", cb: () => closeUniversalModal(), color: "#34495e" }
+        ]);
+    }
+
+    // 政党カードのレンダリング
+    function renderPartyCard(party) {
+        return `
+        <div onclick="showPartyDetail('${party.id}')" style="background: #2c3e50; border: 2px solid ${party.color}; padding: 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative;">
+            <div style="position: absolute; top: 0; left: 0; width: 10px; height: 100%; background: ${party.color}; border-radius: 8px 0 0 8px;"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-left: 10px;">
+                <strong style="font-size: 1.1em; color: white;">${party.name}</strong>
+                <span style="font-size: 0.8em; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px;">メンバー: ${party.members.length}名</span>
+            </div>
+            <div style="font-size: 0.9em; color: #bdc3c7; margin-top: 5px; margin-left: 10px;">
+                代表: ${party.leader ? party.leader.name : "空席"}
+            </div>
+        </div>
+    `;
+    }
+
+    function showPartyDetail(partyId) {
+        const party = parties.find(p => p.id === partyId);
+        if (!party) return;
+
+        // あなたが大統領、あるいはこの政党の代表であるかの判定
+        const isPlayerLeader = party.leader && party.leader.isPlayer;
+
+        let memberHtml = party.members.map(m => `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 5px; border-bottom: 1px solid #3d4e5f;">
+            <span><img src="${m.icon}" style="width:24px; vertical-align:middle; border-radius:50%;"> ${m.name}</span>
+            ${isPlayerLeader && !m.isPlayer ? `<button onclick="expelMember('${party.id}', '${m.id}')" style="background:#e74c3c; color:white; border:none; border-radius:3px; cursor:pointer; font-size:0.7em;">除名</button>` : ""}
+        </div>
+    `).join('');
+
+        let actionButtons = [];
+        if (isPlayerLeader && party.active) {
+            actionButtons.push({ text: "他党と合流交渉", cb: () => proposeMerge(party.id), color: "#f1c40f" });
+            actionButtons.push({ text: "新メンバー招待", cb: () => inviteMember(party.id), color: "#27ae60" });
+        }
+        actionButtons.push({ text: "戻る", cb: () => openPartyMenu(), color: "#34495e" });
+
+        const detailHtml = `
+        <div style="text-align: left;">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+                <div style="width: 50px; height: 50px; background: ${party.color}; border-radius: 10px;"></div>
+                <div>
+                    <h2 style="margin: 0;">${party.name}</h2>
+                    <small>結党: ${party.foundedDate.getFullYear()}年</small>
+                </div>
+            </div>
+            <h4>代表</h4>
+            <div style="padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px;">
+                ${party.leader ? `<img src="${party.leader.icon}" style="width:30px; border-radius:50%;"> ${party.leader.name}` : "空席"}
+            </div>
+            <h4>メンバー一覧 (${party.members.length}名)</h4>
+            <div style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 5px;">
+                ${memberHtml}
+            </div>
+        </div>
+    `;
+
+        openUniversalModal(`${party.name} 詳細`, detailHtml, actionButtons);
+    }
+    function runPartyElection(partyId) {
+        const party = parties.find(p => p.id === partyId);
+        const candidates = party.members.slice(0, 3); // 上位3名が立候補と仮定
+
+        let winner = null;
+        let maxVotes = -1;
+
+        candidates.forEach(cand => {
+            let votes = 0;
+            party.members.forEach(member => {
+                // 党内メンバーとの相性で投票
+                const aff = calculateAffinity(member.ideology, cand.ideology);
+                if (aff > 50) votes++;
+            });
+
+            if (votes > maxVotes) {
+                maxVotes = votes;
+                winner = cand;
+            }
+        });
+
+        party.leader = winner;
+        console.log(`${party.name}の新代表は ${winner.name} に決定！`);
+    }
+    // 政党合流の判定
+    function proposeMerge(myPartyId) {
+        const myParty = parties.find(p => p.id === myPartyId);
+        const otherParties = parties.filter(p => p.active && p.id !== myPartyId);
+
+        let html = `<p>合流を打診する政党を選んでください（成功率は代表同士の相性に依存します）</p>`;
+        otherParties.forEach(p => {
+            const aff = calculateAffinity(myParty.leader.ideology, p.leader.ideology);
+            html += `<button onclick="processMerge('${myParty.id}', '${p.id}')" style="display:block; width:100%; margin:5px 0; padding:10px; text-align:left; background:#34495e; color:white; border:none; border-radius:5px;">
+            ${p.name} (代表: ${p.leader.name} / 相性: ${aff}%)
+        </button>`;
+        });
+
+        openUniversalModal("政党合流交渉", html, [{ text: "戻る", cb: () => showPartyDetail(myPartyId) }]);
+    }
+
+    function processMerge(targetId, otherId) {
+        const target = parties.find(p => p.id === targetId);
+        const other = parties.find(p => p.id === otherId);
+        const aff = calculateAffinity(target.leader.ideology, other.leader.ideology);
+
+        // 成功確率: 基本3% + 相性ボーナス(最大12%) = 最大15% の低確率設定
+        const chance = 0.03 + (aff > 80 ? (aff - 80) * 0.006 : 0);
+        const success = Math.random() < chance;
+
+        if (success) {
+            alert(`${target.name} と ${other.name} が合流し、巨大政党が誕生しました！`);
+            target.name = target.name + "・" + other.name;
+            target.members = [...target.members, ...other.members];
+            other.active = false; // 消滅
+            other.dissolvedDate = new Date(gameDate);
+            showPartyDetail(target.id);
+        } else {
+            alert(`${other.name} の代表 ${other.leader.name} に拒絶されました。「我々の誇りは金では買えない」とのことです。`);
+        }
+    }
+    // 政党結成
+    // 日次処理の中で呼ぶ
+    function checkPartyCreationEvent() {
+        // 200日に1回、10%の確率で発生 (Math.random() < 0.1)
+        // カウントダウン変数 eventCounter などを作って管理すると正確です
+        if (dayCounter % 200 === 0 && Math.random() < 0.3) {
+            dayCounter = 0;
+            startPartyFoundingEvent();
+        }
+    }
+
+    function startPartyFoundingEvent() {
+        // 1. 発起人をランダムなNPCから選ぶ
+        const founder = npcs[Math.floor(Math.random() * npcs.length)];
+
+        // 2. 招待候補を選出 (2人〜50人)
+        const inviteCount = Math.floor(Math.random() * 49) + 2;
+        // プレイヤーを含む全キャラクターからランダムにシャッフルして抽出
+        let potentialMembers = [...npcs, { isPlayer: true, name: profile.name, icon: profile.icon, id: "player" }];
+        potentialMembers = potentialMembers.sort(() => 0.5 - Math.random()).slice(0, inviteCount);
+
+        const invitedNames = potentialMembers.map(m => m.name).join(', ');
+        console.log(`発起人 ${founder.name} が新党結成を呼びかけました！招待: ${invitedNames}`);
+
+        // 3. プレイヤーが招待されているかチェック
+        const playerInvited = potentialMembers.find(m => m.isPlayer);
+
+        if (playerInvited) {
+            // プレイヤーへの招待モーダル
+            setGameSpeed(0);
+            openUniversalModal(
+                "新党結成の誘い",
+                `<div style="text-align:center;">
+                <img src="${founder.icon}" style="width:80px; border-radius:50%;">
+                <p><strong>${founder.name}</strong> が新しい政党を立ち上げようとしています。</p>
+                <p>あなたも創設メンバーとして参加しませんか？</p>
+                <small>（他 ${potentialMembers.length - 1} 名にも招待が送られています）</small>
+            </div>`,
+                [
+                    { text: "参加する", cb: () => finalizeNewParty(founder, potentialMembers, true), color: "#2ecc71" },
+                    { text: "拒否する", cb: () => finalizeNewParty(founder, potentialMembers, false), color: "#e74c3c" }
+                ]
+            );
+        } else {
+            // NPCのみで進行
+            finalizeNewParty(founder, potentialMembers, false);
+        }
+    }
+
+    function finalizeNewParty(founder, invitees, playerJoined) {
+        closeUniversalModal();
+
+        let joinedMembers = [];
+
+        // NPCの承諾判定 (相性や性格で決めるが、今回は簡易的に50%で承諾)
+        invitees.forEach(m => {
+            if (m.isPlayer) {
+                if (playerJoined) joinedMembers.push(m);
+            } else {
+                // NPCは発起人との相性が50以上なら参加しやすい
+                const aff = calculateAffinity(founder.ideology, m.ideology);
+                if (Math.random() * 100 < aff) {
+                    joinedMembers.push(m);
+                }
+            }
+        });
+
+        // 発起人は必ず参加
+        if (!joinedMembers.find(m => m.id === founder.id)) {
+            joinedMembers.push(founder);
+        }
+
+        // 最低2人集まったら結成
+        if (joinedMembers.length >= 2) {
+            joinedMembers.forEach(member => {
+                // もし既にどこかの党に所属していたら、その党のメンバーリストから自分を消す
+                if (member.partyId) {
+                    const oldParty = parties.find(p => p.id === member.partyId);
+                    if (oldParty && oldParty.members) {
+                        oldParty.members = oldParty.members.filter(m => m.id !== member.id);
+                    }
+                }
+            });
+            const generatedName = generateDynamicPartyName();
+            let color = Math.floor(Math.random() * 16777215).toString(16);
+            let colors = "#" + color.padStart(6, '0');
+            const newParty = createParty(
+                generatedName,
+                colors,
+                founder
+            );
+
+            newParty.members = joinedMembers;
+
+            // 所属メンバーにpartyIdをセット（Faction処理用）
+            joinedMembers.forEach(m => {
+                if (!m.isPlayer) m.partyId = newParty.id;
+            });
+            setGameSpeed(0);
+
+            // 汎用モーダルでニュースを表示
+            const newsHtml = `
+        <div style="text-align:center; padding: 20px;">
+            <div style="background:${newParty.color}; color:white; padding:15px; border-radius:10px; margin-bottom:20px;">
+                <h2 style="margin:0;">${newParty.name}</h2>
+                <small>結成の声明</small>
+            </div>
+            <img src="${founder.icon}" style="width:80px; border-radius:50%; border:3px solid ${newParty.color};">
+            <p style="font-size:1.1em; margin-top:10px;">
+                <strong>${founder.name}</strong> 氏を中心とする ${joinedMembers.length} 名が、<br>
+                新たな「<strong>${newParty.name}</strong>」の結成を宣言しました。
+            </p>
+            <div style="background:rgba(0,0,0,0.05); padding:10px; border-radius:5px; font-size:0.9em; color:#666;">
+                「新しい${newParty.name.replace('党', '')}の理想を掲げる！」
+            </div>
+        </div>
+    `;
+
+            openUniversalModal("📰 速報", newsHtml, [
+                { text: "確認", cb: () => closeUniversalModal(), color: "#34495e" }
+            ]);
+        }
+    }
+    // 政党名メーカー
+    function generateDynamicPartyName() {
+        const prefixes = ["自由", "日本", "国民", "革新", "民主", "社会", "保守", "未来", "平和", "フロンティア", "新", "改革", "進歩", "共和", "共に", "みんなで", "無効化", "反", "アンチ", "SNS"];
+        const middles = ["進歩", "共生", "正義", "フロンティア", "改革", "連帯", "希望", "の", "が", "だった"];
+        const suffixes = ["党", "連合", "会", "の会", "党", "連盟", "政治連盟", "派", "党", "クラブ", "新党", "党"]; // "党"を多めに
+
+        const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+        const suffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+
+        // 50%の確率でミドルネーム（名詞）が入る
+        if (Math.random() < 0.5) {
+            const middle = middles[Math.floor(Math.random() * middles.length)];
+            return prefix + middle + suffix;
+        } else {
+            return prefix + suffix;
+        }
+    }
+    // 軍隊
+    // 100日ごとに実行される軍事ライフサイクル
+    function processMilitaryLifeCycle() {
+        console.log("軍更新")
+
+        npcs.forEach(n => {
+            const gov = n.ideology.gov;
+            const econ = n.ideology.econ;
+
+            // 判定用の称号チェック（簡易版）
+            const isMilitarist = (gov > 70 && econ < 30) || (gov > 70 && econ > 70);
+
+            if (n.military) {
+                // 退隊判定: 200日以上経過している場合20%で辞める
+                const serviceDays = Math.floor((new Date(gameDate) - new Date(n.military.joinedDate)) / (1000 * 60 * 60 * 24));
+                if (serviceDays >= 200 && Math.random() < 0.20) {
+                    n.military = null;
+                }
+            } else {
+                // 入隊判定: 軍国/権威は60%、その他は25%
+                const joinChance = isMilitarist ? 0.60 : 0.25;
+                if (Math.random() < joinChance) {
+                    const branches = ["陸軍", "海軍", "空軍"];
+                    n.military = {
+                        branch: branches[Math.floor(Math.random() * branches.length)],
+                        joinedDate: new Date(gameDate),
+                        power: Math.floor(Math.random() * 50) + 10 // 個人の影響力
+                    };
+                }
+            }
+        });
+    }
+    let stats
+    function getMilitaryStats() {
+        stats = {
+            陸軍: { members: [], totalPower: 0, color: "#5d6d31" },
+            海軍: { members: [], totalPower: 0, color: "#2980b9" },
+            空軍: { members: [], totalPower: 0, color: "#7f8c8d" },
+            totalSoldiers: 0
+        };
+
+        npcs.forEach(n => {
+            if (n.military) {
+                stats[n.military.branch].members.push(n);
+                stats[n.military.branch].totalPower += n.military.power;
+                stats.totalSoldiers++;
+            }
+        });
+
+        // 各軍のリーダーを選出（その軍で最も影響力が高いNPC）
+        ["陸軍", "海軍", "空軍"].forEach(b => {
+            stats[b].leader = stats[b].members.sort((a, b) => b.military.power - a.military.power)[0];
+        });
+
+        // 総軍リーダー（全軍で最もパワーがあるNPC）
+        const allMilitary = [...stats.陸軍.members, ...stats.海軍.members, ...stats.空軍.members];
+        stats.grandLeader = allMilitary.sort((a, b) => b.military.power - a.military.power)[0];
+
+        return stats;
+    }
+    function showMilitaryModal() {
+        const stats = getMilitaryStats();
+
+        let html = `
+    <div style="background:#2c3e50; color:#ecf0f1; padding:20px; border-radius:8px; font-family:sans-serif;">
+        <div style="text-align:center; border-bottom:2px solid #34495e; padding-bottom:15px; margin-bottom:20px;">
+            <h2 style="margin:0; letter-spacing:2px;">🛡️ 国家最高軍事会議</h2>
+            <small>全軍総数: ${stats.totalSoldiers} 名 / 国内影響力: ${((stats.totalSoldiers / npcs.length) * 100).toFixed(1)}%</small>
+        </div>
+
+        ${stats.grandLeader ? `
+        <div style="background:#c0392b; padding:15px; border-radius:5px; margin-bottom:20px; display:flex; align-items:center; gap:15px; border:2px solid #e74c3c;">
+            <img src="${stats.grandLeader.icon}" style="width:60px; height:60px; border-radius:50%; border:2px solid white;">
+            <div>
+                <div style="font-size:0.8em; opacity:0.8;">統合参謀本部 総軍リーダー</div>
+                <div style="font-size:1.2em; font-weight:bold;">${stats.grandLeader.name}</div>
+                <div style="font-size:0.7em;">所属: ${stats.grandLeader.military.branch}</div>
+            </div>
+            <div style="margin-left:auto; text-align:right;">
+                <div style="font-size:0.7em;">クーデター警戒</div>
+                <div style="font-size:1.2em; font-weight:bold;">            ${stats.陸軍.members.length > stats.海軍.members.length && stats.陸軍.members.length > stats.空軍.members.length
+                    ? '🚨 高' : '✅ 低'}</div>
+            </div>
+        </div>
+        ` : ''}
+
+        <div style="display:flex; height:30px; border-radius:15px; overflow:hidden; margin-bottom:25px; border:1px solid #fff;">
+            ${["陸軍", "海軍", "空軍"].map(b => {
+                        const width = stats.totalSoldiers ? (stats[b].members.length / stats.totalSoldiers) * 100 : 0;
+                        return `<div style="width:${width}%; background:${stats[b].color}; transition: width 0.5s;" title="${b}"></div>`;
+                    }).join('')}
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+            ${["陸軍", "海軍", "空軍"].map(b => {
+                        const branch = stats[b];
+                        const leader = branch.leader;
+                        const powerRatio = stats.totalSoldiers ? (branch.members.length / stats.totalSoldiers * 100).toFixed(0) : 0;
+
+                        return `
+                <div style="background:#34495e; padding:10px; border-radius:5px; border-top:5px solid ${branch.color};">
+                    <div style="font-weight:bold; border-bottom:1px solid #555; margin-bottom:8px;">${b}</div>
+                    <div style="font-size:0.7em; margin-bottom:10px;">
+                        勢力比: ${powerRatio}%<br>
+                        人員: ${branch.members.length}名
+                    </div>
+                    ${leader ? `
+                        <div style="text-align:center;">
+                            <img src="${leader.icon}" style="width:40px; height:40px; border-radius:50%; background:#eee;">
+                            <div style="font-size:0.75em; font-weight:bold; margin-top:5px;">${leader.name.split(' ')[0]}</div>
+                            <small style="font-size:0.6em; color:#bdc3c7;">最高指揮官</small>
+                        </div>
+                    ` : '<small>指揮官不在</small>'}
+                </div>`;
+                    }).join('')}
+        </div>
+
+        <div style="margin-top:20px; font-size:0.7em; background:rgba(0,0,0,0.2); padding:10px; border-radius:4px;">
+            <strong>📌 勢力概況:</strong><br>
+            ${stats.陸軍.members.length > stats.海軍.members.length && stats.陸軍.members.length > stats.空軍.members.length
+                ? "現在、陸軍が国内の治安権限を掌握しています。クーデターへの警戒が必要です。"
+                : "三軍の均衡が保たれています。文民統制は比較的容易です。"}
+        </div>
+    </div>
+    `;
+
+        openUniversalModal("軍事情報・勢力図", html, [
+            { text: "閉じる", cb: closeUniversalModal, color: "#7f8c8d" }
+        ]);
     }
 </script>
 

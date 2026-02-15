@@ -300,6 +300,12 @@
                         document.getElementById('diplomatic-axis').value = profile.ideology.diplomacy || 50;
                     }
 
+                    const listContainer = document.getElementById('custom-npc-list');
+                    listContainer.innerHTML = ""; // 現在の表示をクリア
+                    if (profile.customNPCs && Array.isArray(profile.customNPCs)) {
+                        profile.customNPCs.forEach(npc => addCustomNPCField(npc));
+                    }
+
                     alert("ファイルからプロフィールを読み込みました！");
                     console.log("インポート成功:", profile);
                 } catch (err) {

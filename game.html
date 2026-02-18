@@ -227,7 +227,7 @@
         </div>
         <div class="stat-card" style="margin-top: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>🗳️ 次の大統領選挙まで: <strong id="election-days-left"></strong> 日</span>
+                <span>🗳️ 次の大統領選挙まで: <strong id="election-days-left"></strong>日</span>
                 <button onclick="openElectionHistory()"
                     style="background: #3498db; border: none; padding: 5px 10px; color: white; border-radius: 4px; cursor: pointer; font-size: 0.8em;">選挙履歴・分析</button>
                 <button onclick="openPartyMenu()"
@@ -618,7 +618,7 @@
     let parhistory = [];
     let prpl = [];
     let isPlayerRunningForPresident = false
-    let parliamentElectionCounter = 2; // 2年（730日）に1回とする
+    let parliamentElectionCounter = 1; // 2年（730日）に1回とする
     let isPlayerRunningForParliament = false; // プレイヤーが議会選に立候補しているか
     let president = null;
 
@@ -634,7 +634,7 @@
     // 役職名と説明のマッピング
     const CABINET_ROLES = {
         vicePresident: "副大統領",
-        stateSecretary: "国務長官",
+        stateSecretary: "外務長官",
         justiceSecretary: "司法長官",
         defenseSecretary: "国防長官",
         commerceSecretary: "商務長官",
@@ -649,13 +649,15 @@
         "フランクリン", "カルヴィン", "カルビン", "ユスフ", "ヨセフ", "ヨセープ", "レシプ", "レシップ", "ジェームズ", "ジェームス", "ジェイムズ", "アーサー",
         "チャールズ", "ウィンストン", "ウィントン", "ミラード", "ザカリー", "アンドリュー", "アンドルー", "李", "キア", "リシ", "ボリス", "ボブ", "ビル", "グロバー", "グロヴァー"
         , "ハリー", "ジョンソン", "ジョーン", "ショーン", "ション", "フランキン", "アルフレッド", "石井", "石田", "石川", "ヘンリー", "ヒューバート", "ニコラス",
-        "ジョライ", "ショライ", "ホレイショ", "ホーレイ", "ホレイ", "岩井", "岩崎", "岩田", "斎藤", "齋藤", "渕上", "淵上", "田山"
+        "ジョライ", "ショライ", "ホレイショ", "ホーレイ", "ホレイ", "岩井", "岩崎", "岩田", "斎藤", "齋藤", "渕上", "淵上", "田山",
+        "ロバート", "ロバートソン", "ロバーツ", "マイケル", "マイカル", "マクドナルド", "マクダネル", "マクダーモット", "マクダモット", "マクダモン", "マクダンネル", "マクダンモット", "マクダン",
+        "ジョンストン", "ヒューストン", "ミシェル", "ハワード"
     ];
     const firstNames = ["太郎", "次郎", "健一", "昭夫", "和也", "浩司", "悟", "直樹", "一郎", "進", "道夫", "正", "秀樹", "英二", "雄太",
         "アダム", "アダムズ", "アダムス", "ジェファーソン", "パーティー", "パワード", "パート", "スミス", "ワイルド", "マクドナルド", "ドゥーイ", "ドーイ", "スコット", "いっぺい", "スカット",
         "ボソン", "ポズン", "明夫", "あきお", "クーリッジ", "クーリー", "栗島", "シゲル", "茂", "しげお", "しげた", "ジャクソン", "ジャックソン",
         "アデム", "ジョーイ", "ヘンフリー", "ヘフリー", "マクカバン", "マクガバン", "マクバン", "マック", "ダナス", "ガナス", "マナス", "ラナス",
-        "ラペス", "ジョンソン", "ジョン", "バーナー", "バーナード", "バーナーズ"
+        "ラペス", "ジョンソン", "ジョン", "バーナー", "バーナード", "バーナーズ", "バーナ", "バーノン", "バノン", "バーノ", "バノ", "ハリソン", "ハリー", "ヘンリー", "ヘフリー", "ヒューム", "ヒューバート", "ニコルソン", "ニコラス", "ニコルソン", "ニコル", "ニクルソン"
     ];
     const specialMiddles = ["・D・", "・フォン・", "・デ・", "・ヴァン・"];
 
@@ -664,21 +666,22 @@
 
     // 二つを合体させて最強のミドルネームリストを作る
     const middleNames = [...specialMiddles, ...alphabetMiddles];
-    let electionCountdown = 1;
+    let electionCountdown = 2;
     let profile = null;
     window.onload = function () {
         // 1. LocalStorageからデータを取得
         const savedData = localStorage.getItem('political_game_data');
 
         if (!savedData) {
-            alert("データが見つかりません。プロフィールを設定してください。");
+            alert("データが見つかりません。プロフィールを再定義してください。");
             location.href = 'index.html'; // データがない場合は戻す
             return;
         }
 
         profile = JSON.parse(savedData);
         profile.id = "player";
-        profile.title = "";
+        profile.history = [];
+        profile.title = "民間人";
 
         npcs = []; // 配列を初期化
 
@@ -709,6 +712,8 @@
                     isPlayer: false,
                     termCount: 0,
                     military: null,
+                    history: [],
+                    title: "民間人",
                     ideology: {
                         economy: parseInt(c.ideology.economy),
                         government: parseInt(c.ideology.government),
@@ -938,7 +943,7 @@
             // --- 🚀 【新規】軍・警察以外かつ、プレイヤー以外の無所属候補を抽出 ---
             const unaffiliatedCivilians = npcs.filter(npc => {
                 if (npc.isPlayer || npc.partyId) return false;
-                const isMilitary = npc.job && (npc.job.includes("軍") || npc.job.includes("兵") || npc.job.includes("警"));
+                const isMilitary = npc.military
                 return !isMilitary;
             });
 
@@ -1068,11 +1073,13 @@
             setGameSpeed(0);
             openUniversalModal("🏛️ 政党解散", `
             <div style="text-align:center;">
-                <h2 style="color:#e74c3c;">${oldName} 事実上の解散</h2>
+                <h2 style="color:#e74c3c;">【速報】${oldName}の解散</h2>
                 <p>${j}</p>
-                <p style="font-size:0.8em;">残っていた ${memberCount} 名の議員は無所属となります。</p>
+                <p style="font-size:0.8em;">残っていた${memberCount}名のメンバーは無所属となります。</p>
             </div>
-        `, [{ text: "確認", cb: () => { closeUniversalModal(); setGameSpeed(1); }, color: "#34495e" }]);
+        `, [{ text: "確認", cb: () => { closeUniversalModal(); setGameSpeed(1); }, color: "#34495e" }],
+                { forceOpen: true }
+            );
         } else {
             // --- 代表がいない場合の継承処理 ---
             // メンバーリストに現在のリーダーがいない場合（他党へ移籍、死亡、除名など）
@@ -1137,28 +1144,71 @@
      * @param {string} htmlContent - 中身のHTML（文字列でOK）
      * @param {Array} buttons - ボタンの配列 [{text: "文字", cb: 関数, color: "色"}]
      */
-    function openUniversalModal(title, htmlContent, buttons = []) {
+    // --- 🟢 追加：モーダルの順番待ち用変数 🟢 ---
+    let modalQueue = [];
+    let isModalOpen = false;
+
+    // モーダルを開く要求を受け取る関数
+    function openUniversalModal(title, htmlContent, buttons = [], options = {}) {
+        // すぐに表示せず、一旦キュー（列）の最後尾に並ばせる
+        if (options.forceOpen) {
+            // 🌟 強制モード：キューを無視して即座に現在の中身を書き換える
+            isModalOpen = true;
+            renderModalContent(title, htmlContent, buttons);
+        } else {
+            // 通常モード：列に並ぶ
+            modalQueue.push({ title, htmlContent, buttons });
+            processModalQueue();
+        }
+    }
+
+    function renderModalContent(title, htmlContent, buttons) {
         document.getElementById('modal-title').innerText = title;
         document.getElementById('modal-body').innerHTML = htmlContent;
-
         const footer = document.getElementById('modal-footer');
-        footer.innerHTML = ""; // 以前のボタンをクリア
+        footer.innerHTML = "";
 
         buttons.forEach(btnInfo => {
             const btn = document.createElement('button');
             btn.innerText = btnInfo.text;
-            btn.style.cssText = `padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; background:${btnInfo.color || '#4ecca3'}; color:white;`;
-            btn.onclick = () => {
-                btnInfo.cb(); // コールバック実行
-            };
+            btn.style.cssText = `padding:10px 20px; margin:0 5px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; background:${btnInfo.color || '#4ecca3'}; color:white;`;
+            btn.onclick = () => { if (btnInfo.cb) btnInfo.cb(); };
             footer.appendChild(btn);
         });
-
         document.getElementById('universal-modal').style.display = 'flex';
     }
 
+    // 順番待ちの列を処理する関数
+    function processModalQueue() {
+        if (isModalOpen || modalQueue.length === 0) return;
+        isModalOpen = true;
+        const currentModal = modalQueue.shift();
+        renderModalContent(currentModal.title, currentModal.htmlContent, currentModal.buttons);
+    }
+
+    // モーダルを閉じる関数（既存のものがあれば書き換えてください）
     function closeUniversalModal() {
-        document.getElementById('universal-modal').style.display = 'none';
+        const modal = document.getElementById('universal-modal');
+        if (!modal) {
+            console.error("モーダル要素（#universal-modal）が見つかりません");
+            return;
+        }
+
+        // 1. 物理的に非表示にする
+        modal.style.display = 'none';
+
+        // 2. 状態をリセット
+        isModalOpen = false;
+
+        // 3. 【重要】もし「投票完了」などの後で、無理に次のモーダルを出したくない場合は
+        // 一旦キューをクリアする処理が必要な場合があります。
+        // ここではログを出して、何が起きているか確認できるようにします。
+        if (modalQueue.length > 0) {
+            console.log(`次のモーダルを表示します（残り: ${modalQueue.length}件）`);
+            setTimeout(processModalQueue, 0);
+        } else {
+            console.log("全てのモーダルが閉じられました");
+        }
     }
     // 汎用シリーズ終わり //
 
@@ -1186,15 +1236,18 @@
     function createRandomNPC(name) {
         // ランダムなシード文字列を生成
         const randomSeed = Math.random().toString(36).substring(7);
+        const randomSeed2 = Math.random().toString(36).substring(7);
         const icons = ["adventurer", "adventurer-neutral", "avataaars", "avataaars-neutral", "big-ears", "big-ears-neutral", "personas", "thumbs", "toon-head", "fun-emoji", "pixel-art", "pixel-art-neutral"];
         const icons1 = icons[Math.floor(Math.random() * icons.length)];
 
         return {
-            id: Date.now() + Math.random(), // 💥 固有のIDを追加
+            id: Date.now() + randomSeed + randomSeed2, // 💥 固有のIDを追加（追記：暗号を超強化、かぶる確率は宝くじよりも低い）
             name: name,
             termCount: 0,
             // DiceBear APIを使用 (seedをランダムに)
             icon: `https://api.dicebear.com/9.x/${icons1}/svg?seed=${randomSeed}`,
+            history: [],
+            title: "民間人",
             ideology: {
                 economy: Math.floor(Math.random() * 101),
                 government: Math.floor(Math.random() * 101),
@@ -1231,16 +1284,16 @@
             const party = parties.find(p => p.id === npc.partyId);
             const partyName = party ? party.name : "無所属";
             const partyColor = party ? party.color : "#95a5a6"; // 無所属はグレー
+            const job = npc.title || "民間人";
+            const matchjob = job.includes(filterText);
             const matchName = npc.name.includes(filterText);
             const matchParty = partyName.includes(filterText);
 
-            if (!matchName && !matchParty) return;
+            if (!matchName && !matchParty && !matchjob) return;
 
             const card = document.createElement('div');
             card.className = "stat-card";
-            card.style.cursor = "pointer";
 
-            card.onclick = () => openNpcModal(npc.id);
 
             card.innerHTML = `
             <div style="display:flex; align-items:center; margin-bottom:5px;">
@@ -1252,19 +1305,40 @@
                     </div>
                 </div>
             </div>
-            
-            <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                <div class="ideology-tag" style="font-size: 0.6em; padding: 2px 6px; background: #34495e; border-radius:3px; color:white;">
-                    ${title}
-                </div>
+<div style="display:flex; gap:4px; flex-wrap:wrap; align-items:center;">
+        <div class="ideology-tag" style="font-size: 0.6em; padding: 2px 6px; background: #34495e; border-radius:3px; color:white;">
+            ${job}
+        </div>
                 <div class="party-tag" style="font-size: 0.6em; padding: 2px 6px; background: ${partyColor}; border-radius:3px; color:white; font-weight:bold;">
                     ${partyName}
                 </div>
-            </div>
+            <button onclick="openNpcModal('${npc.id}');" 
+                style="margin-left:auto; font-size:0.6em; padding:2px 5px; cursor:pointer; background:none; border:1px solid #7f8c8d; color:#7f8c8d; border-radius:3px;">
+                🛠️ 編集
+        </button>
+            <button onclick="showNpcHistory('${npc.id}')" 
+                style="margin-left:auto; font-size:0.6em; padding:2px 5px; cursor:pointer; background:none; border:1px solid #7f8c8d; color:#7f8c8d; border-radius:3px;">
+            📜 経歴
+        </button>
+    </div>
         `;
             listElement.appendChild(card);
         });
     }
+
+    // グローバルに配置してください
+    window.showNpcHistory = (npcId) => {
+        const npc = npcs.find(n => n.id === npcId);
+        if (!npc) return;
+
+        // 履歴がない場合のメッセージ
+        const historyText = (npc.history && npc.history.length > 0)
+            ? npc.history.map(h => `・ ${h}`).join('\n')
+            : "特筆すべき経歴はありません。";
+
+        // 簡易的な表示（後で openUniversalModal に差し替えてもOK！）
+        alert(`【${npc.name} の経歴】\n\n${historyText}`);
+    };
 
     // --- 新しいNPCを追加する関数 ---
     function addNewNPC() {
@@ -1433,6 +1507,7 @@
                 // 毎月1日に何かイベントを起こすならここ
                 if (gameDate.getDate() === 1) {
                     updatePartyLeaders();
+                    checkCoupEvent();
                     console.log("月の始まり！予算の更新など...");
                 }
             }, 1000 / gameSpeed);
@@ -1610,13 +1685,21 @@
                 </div>
             </div >`;
         }
+        if (president) {
+            president.title = "元大統領";
+            president.history.push(`${gameDate.getFullYear()}年1月20日:大統領を退任、${presidentElect.name}が新大統領となる。`);
+        }
         president = presidentElect
+        presidentElect.title = "大統領";
+        presidentElect.termCount = presidenttermcount;
+        presidentElect.history.push(`${gameDate.getFullYear()}年1月20日:第${presidenttermcount}期目の大統領に就任`);
 
         openUniversalModal(title, html, [
             {
                 text: "おめでとう。",
                 cb: () => {
                     presidentElect = null;
+                    closeUniversalModal();
                     appointCabinet(president); // 内閣任命実行
                     showCabinetAnnouncement(); // 内閣発表画面へ
                 },
@@ -1780,8 +1863,16 @@
         }
 
         // NPCからランダムに3人立候補（先行者利益枠）
-        const npcPotential = [...npcs].sort(() => 0.5 - Math.random()).slice(0, 3);
-        npcPotential.forEach(n => {
+        // 1. 現職(president)がいれば80%で優先し、全体から上位3人だけ選ぶ
+        const potential = [...npcs].sort((a, b) => {
+            if (a.president) return Math.random() < 0.8 ? -1 : 1;
+            return 0.5 - Math.random();
+        }).slice(0, 3);
+
+        // 2. 選ばれた3人（現職含む）を候補者にする
+        potential.forEach(n => {
+            const text = n.president ? "再選を目指して大統領選挙に立候補" : "大統領選挙に立候補";
+            n.history.push(`${new Date(gameDate).getFullYear()}年:${text}`);
             candidates.push({ ...n, votes: 0, supporters: [], isPlayer: false });
         });
 
@@ -1811,6 +1902,7 @@
             <div id="vote-target-${cand.id}" class="stat-card" 
                  style="cursor:pointer; text-align:center; border: 2px solid ${partyColor}; position:relative; overflow:hidden;">
                 
+                 
                 <div style="background:${partyColor}; color:white; font-size:0.6em; padding:2px 0; margin-bottom:5px; font-weight:bold;">
                     ${partyName}
                 </div>
@@ -1828,7 +1920,7 @@
         html += `</div>`;
 
         // 汎用モーダルで投票先を表示
-        openUniversalModal(title, html, []); // ボタンはJSで後からイベント付与
+        openUniversalModal(title, html, [], { forceOpen: true }); // ボタンはJSで後からイベント付与
 
         // 各カードにクリックイベントを付与
         candidates.forEach(cand => {
@@ -1897,7 +1989,13 @@
 
         // 3. 結果の整理と履歴への保存（スナップショット化）
         candidates.sort((a, b) => b.votes - a.votes);
-        presidentElect = candidates[0];
+        const realNpc = npcs.find(n => n.id === candidates[0].id);
+
+        // 2. 本物が見つかったら、それを大統領にする（これで同期される！）
+        if (realNpc) {
+            presidentElect = realNpc;
+            presidentElect.title = "次期大統領"; // 本人に「大統領フラグ」を立てる
+        }
 
         const historyEntry = {
             date: new Date(gameDate),
@@ -1936,6 +2034,23 @@
     function showElectionResult(results) {
         const content = document.getElementById('election-content');
         const [first, second, ...others] = results;
+        const year = new Date(gameDate).getFullYear();
+
+        // 1位
+        if (first) {
+            first.history.push(`${year}年: 大統領選挙で当選（${first.votes}票）`);
+        }
+        // 2位（elseを消す！）
+        if (second) {
+            second.history.push(`${year}年: 大統領選挙で2位（${second.votes}票）`);
+        }
+        // 3位以下（ここもelseを消す！）
+        if (others.length > 0) {
+            others.forEach((other, index) => {
+                const rank = index + 3; // others[0]は3位なので
+                other.history.push(`${year}年: 大統領選挙で${rank}位（${other.votes}票）`);
+            });
+        }
         if (first.isPlayer) {
             isPlayerRunningForPresident = true
         } else {
@@ -2021,8 +2136,8 @@
                 生配信ライブが行われる予定ですが、出席しますか？
             </div>`,
                 [
-                    { text: "出席する", cb: () => processDinner(true), color: "#4ecca3" },
-                    { text: "不参加", cb: () => processDinner(false), color: "#e74c3c" }
+                    { text: "出席する", cb: () => { processDinner(true); closeUniversalModal(); }, color: "#4ecca3" },
+                    { text: "不参加", cb: () => { processDinner(false); closeUniversalModal(); }, color: "#e74c3c" }
                 ]
             );
         } else {
@@ -2294,7 +2409,7 @@
         let html = `
         <div style="max-height: 70vh; overflow-y: auto; text-align: left;">
         ${hasNoParty ? `
-            <div style="background: linear-gradient(135deg, #4ecca3, #45b291); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; color: white; cursor: pointer;" onclick="openCreatePartyModal()">
+            <div style="background: linear-gradient(135deg, #4ecca3, #45b291); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; color: white; cursor: pointer;" onclick="openCreatePartyModal(); closeUniversalModal();">
                 <strong style="font-size: 1.2em;">＋ 新しい政党を結成する</strong><br>
                 <small>メンバーを集めて、あなたの理想を掲げよう</small>
             </div>
@@ -2350,8 +2465,8 @@
     `;
 
         openUniversalModal("新党結成", content, [
-            { text: "結党する！", cb: () => executeCreateParty(), color: "#2ecc71" },
-            { text: "キャンセル", cb: () => openPartyMenu(), color: "#95a5a6" }
+            { text: "結党する！", cb: () => { executeCreateParty(); closeUniversalModal(); }, color: "#2ecc71" },
+            { text: "キャンセル", cb: () => { openPartyMenu(); closeUniversalModal(); }, color: "#95a5a6" }
         ]);
     }
 
@@ -2414,7 +2529,7 @@
     // 政党カードのレンダリング
     function renderPartyCard(party) {
         return `
-        <div onclick="showPartyDetail('${party.id}')" style="background: #2c3e50; border: 2px solid ${party.color}; padding: 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative;">
+        <div onclick="showPartyDetail('${party.id}'); closeUniversalModal();" style="background: #2c3e50; border: 2px solid ${party.color}; padding: 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; position: relative;">
             <div style="position: absolute; top: 0; left: 0; width: 10px; height: 100%; background: ${party.color}; border-radius: 8px 0 0 8px;"></div>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-left: 10px;">
                 <strong style="font-size: 1.1em; color: white;">${party.name}</strong>
@@ -2446,7 +2561,7 @@
             actionButtons.push({ text: "他党と合流交渉", cb: () => proposeMerge(party.id), color: "#f1c40f" });
             actionButtons.push({ text: "新メンバー招待", cb: () => inviteMember(party.id), color: "#27ae60" });
         }
-        actionButtons.push({ text: "戻る", cb: () => openPartyMenu(), color: "#34495e" });
+        actionButtons.push({ text: "戻る", cb: () => { openPartyMenu(); closeUniversalModal(); }, color: "#34495e" });
         let dateInfoHtml = `<small>結成: ${party.foundedDate.getFullYear()}年</small>`;
         if (!party.active && party.disbandedDate) {
             dateInfoHtml += `<br><small style="color: #e74c3c;">解散: ${party.disbandedDate.getFullYear()}年</small>`;
@@ -2462,7 +2577,7 @@
                 }
             } else if (hasNoParty) {
                 // 入党申請ボタン（無所属の場合のみ）
-                actionButtons.push({ text: "入党申請を送る", cb: () => applyToParty(party.id), color: "#2ecc71" });
+                actionButtons.push({ text: "入党申請を送る", cb: () => { applyToParty(party.id); closeUniversalModal(); }, color: "#2ecc71" });
             }
         }
         const detailHtml = `
@@ -2900,6 +3015,84 @@
 
         return stats;
     }
+    function checkCoupEvent() {
+        const stats = getMilitaryStats();
+        // 陸軍の勢力が45%を超えると、5%の確率でクーデター発生
+        // テスト用:executeCoup(getMilitaryStats());
+        const armyRatio = stats.陸軍.members.length / stats.totalSoldiers;
+
+        if (armyRatio > 0.45 && Math.random() < 0.05) {
+            const leader = stats.陸軍.leader;
+            if (leader) {
+                addLog(`🚨 陸軍の${leader.name}将軍らが首都に接近中！`, "news");
+                executeCoup(stats);
+            } else {
+                addLog("アナーキスト達が首都に接近中、警察官により大統領官邸への侵入は防がれました。", "news");
+            }
+        }
+    }
+
+    function executeCoup(stats) {
+        const armyPower = stats.陸軍.members.length;
+        const navyPower = stats.海軍.members.length;
+        const airPower = stats.空軍.members.length;
+
+        // 成功率の計算（陸軍が突出しているほど高く、他軍やプレイヤーの支持率が高いほど下がる）
+        let successChance = (armyPower / stats.totalSoldiers) * 100;
+        const defensePower = (navyPower + airPower) * 0.5; // 海・空軍の抵抗
+        const civilianSupport = (profile.popularity || 50) / 2; // 国民の支持による抵抗
+
+        successChance -= (defensePower + civilianSupport);
+        const isSuccess = Math.random() * 100 < successChance;
+
+        // クーデター用モーダルの表示
+        showCoupModal(isSuccess, stats);
+    }
+
+    function showCoupModal(isSuccess, stats) {
+        setGameSpeed(0);
+        const leader = stats.陸軍.leader;
+        const title = isSuccess ? "🚨 クーデター成功：政権崩壊" : "⚔️ クーデター未遂：鎮圧完了";
+        const bgColor = isSuccess ? "#4a0000" : "#2c3e50";
+
+        let message = isSuccess
+            ? `陸軍が大統領官邸に来ています、乗り込んで${president.name}を狙撃しました、${leader.name}将軍が臨時の大統領に就任。${president.name}大統領は拘束されました。`
+            : `陸軍(${leader.name})派が蜂起しましたが、海軍・空軍や警察官、政府の迅速な対応により鎮圧されました。
+            リーダーである${leader.name}は逃亡中です。`;
+
+        let html = `
+    <div style="background:${bgColor}; color:white; padding:30px; border-radius:10px; text-align:center; font-family:serif;">
+        <h1 style="color:#e74c3c; font-size:2em; margin-bottom:20px; text-shadow:2px 2px black;">${isSuccess ? 'REVOLUTION' : 'REBELLION'}</h1>
+        <div style="background:rgba(0,0,0,0.5); padding:20px; border-radius:5px; border:1px solid #e74c3c;">
+            <p style="font-size:1.2em; line-height:1.6;">${message}</p>
+        </div>
+        <div style="margin-top:20px;">
+            <img src="${leader.icon}" style="width:100px; height:100px; border-radius:50%; border:3px solid #e74c3c;">
+            <img src="${president.icon}" style="width:100px; height:100px; border-radius:50%; border:3px solid #e74c3c;">
+            <div style="font-weight:bold; margin-top:10px;">${leader.name}将軍(左)</div>
+            <div style="font-weight:bold; margin-top:10px;">${president.name}大統領(右)</div>
+        </div>
+    </div>
+    `;
+
+        openUniversalModal(title, html, [
+            {
+                text: isSuccess ? "うわああ！" : "よかったー",
+                cb: () => {
+                    closeUniversalModal();
+                    if (isSuccess) {
+                        president = leader; // クーデター成功ならリーダーが新大統領に
+                        president.title = "大統領";
+                        president.partyId = null; // クーデター後は政党からも離れる（軍の独裁になるため）
+                        president.military = null; // 軍の役職もリセット
+                    }
+                    if (!isSuccess) addLog("クーデターは鎮圧されましたが、軍内に不穏な空気が残っています。", "warning");
+                },
+                color: "#e74c3c"
+            }, { forceOpen: true }
+        ]);
+    }
+
     function showMilitaryModal() {
         const stats = getMilitaryStats();
 
@@ -3137,7 +3330,7 @@
         </div>
     `;
 
-        openUniversalModal("🏛️ 議会総選挙 投開票", modalContent, []);
+        openUniversalModal("🏛️ 議会総選挙 投開票", modalContent, [], { forceOpen: true });
 
         const updateList = (filter = "") => {
             const list = document.getElementById('candList');
@@ -3315,26 +3508,32 @@
             const isWinner = electedIds.has(npc.id);
             const wasIncumbent = (npc.title === "議員");
             const ranInElection = candidateIds.has(npc.id);
+            const currentYear = new Date(gameDate).getFullYear();
 
             if (isWinner) {
                 npc.termCount++; // 当選回数アップ
                 if (npc.termCount === 1) {
                     report.newlyElected.push(`${npc.name} (初)`);
+                    npc.history.push(`${currentYear}年:${currentYear}年議会選挙で初当選`); // 履歴に追加
                 } else {
                     report.reElected.push(`${npc.name} (${npc.termCount}期)`);
+                    npc.history.push(`${currentYear}年:${currentYear}年議会選挙で再選（${npc.termCount}期目）`); // 履歴に追加
                 }
                 npc.title = "議員";
             } else {
                 if (ranInElection && !wasIncumbent) {
                     npc.title = "落選者";
+                    npc.history.push(`${currentYear}年:${currentYear}年議会選挙で落選`); // 履歴に追加
                     if (!wasIncumbent) report.out.push(npc.name);
                 }
                 if (wasIncumbent && ranInElection) {
                     report.defeated.push(npc.name);
                     npc.title = "元議員";
+                    npc.history.push(`${currentYear}年:${currentYear}年議会選挙で落選（現職）`); // 履歴に追加
                 } else if (wasIncumbent && !ranInElection) {
                     report.retired.push(npc.name);
                     npc.termCount = 0; // 引退した議員は当選回数リセット
+                    npc.history.push(`${currentYear}年:${currentYear}年議会選挙には立候補せず、引退`); // 履歴に追加
                     npc.title = "元議員（引退）";
                 }
             }
@@ -3715,10 +3914,12 @@
 
             // B. 議員落選による自動失職
             // 国政政党（議席あり）なのに、代表が議員でない場合（落選）
-            const hasSeats = npcs.filter(n => n.partyId === party.id && n.title === "議員").length > 0;
-            if (hasSeats && party.leader && party.leader.title !== "議員") {
-                addLog(`${party.name}の${party.leader.name}代表は、落選に伴い代表を辞任しました。`, "news");
-                needsElection = true;
+            if (!needsElection && Math.random() < 0.3) {
+                const hasSeats = npcs.filter(n => n.partyId === party.id && n.title === "議員").length > 0;
+                if (hasSeats && party.leader && party.leader.title == "落選者") {
+                    openUniversalModal(`${party.name}の${party.leader ? party.leader.name : '代表'}が辞任`, `${party.name}の${party.leader.name}代表は、落選に伴い代表を辞任しました。`, [{ text: "了解", cb: () => { closeUniversalModal(); } }], { forceOpen: true });
+                    needsElection = true;
+                }
             }
 
             // C. ランダムな辞任（スキャンダル、病気、党内抗争など）
@@ -3726,7 +3927,7 @@
             if (!needsElection && Math.random() < 0.005) {
                 const reasons = ["健康上の理由", "不祥事の責任", "党内対立の激化", "支持率低迷"];
                 const reason = reasons[Math.floor(Math.random() * reasons.length)];
-                addLog(`${party.name}の${party.leader ? party.leader.name : '代表'}が${reason}で突如辞任しました！`, "emergency");
+                openUniversalModal(`${party.name}の${party.leader ? party.leader.name : '代表'}が辞任`, `${party.name}の${party.leader ? party.leader.name : '代表'}が${reason}で突如辞任しました！`, [{ text: "了解", cb: () => { closeUniversalModal(); } }], { forceOpen: true });
                 needsElection = true;
             }
 
@@ -3758,8 +3959,8 @@
     `;
 
             openUniversalModal("代表選への出馬", content, [
-                { text: "立候補する", cb: () => startPartyElection(party, true), color: "#2ecc71" },
-                { text: "立候補しない", cb: () => startPartyElection(party, false), color: "#95a5a6" }
+                { text: "立候補する", cb: () => { startPartyElection(party, true); closeUniversalModal(); }, color: "#2ecc71" },
+                { text: "立候補しない", cb: () => { startPartyElection(party, false); closeUniversalModal(); }, color: "#95a5a6" }
             ]);
         }
     }
@@ -3812,7 +4013,7 @@
         let candButtons = electionCands.map(c => {
             const safeId = (c.isPlayer || !c.id) ? "player" : c.id;
             return `
-        <button onclick="processPartyVote('${party.id}', '${c.id}', ${JSON.stringify(electionCands.map(cand => cand.id)).replace(/"/g, "'")})" 
+        <button onclick="processPartyVote('${party.id}', '${c.id}', ${JSON.stringify(electionCands.map(cand => cand.id)).replace(/"/g, "'")}); closeUniversalModal();" 
                 style="width: 100%; padding: 12px; margin-bottom: 8px; border: 1px solid #3498db; border-radius: 8px; background: white; cursor: pointer; display: flex; align-items: center; gap: 10px;">
             <img src="${c.icon}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
             <div style="text-align: left;">
@@ -3841,8 +4042,6 @@
         };
         const party = parties.find(p => p.id === partyId);
         openUniversalModal("開票中...", `<div id="counting-area" style="text-align:left; line-height:1.8;"></div>`, []);
-
-        const countingArea = document.getElementById('counting-area');
 
         // 1. 投票箱の初期化 (ここでNaNを防ぐ)
         let voteCounts = {};
@@ -3903,6 +4102,7 @@
 
         // 6. 結果の確定
         setTimeout(() => {
+            const countingArea = document.getElementById('counting-area');
             countingArea.innerHTML = logHtml;
             const winnerId = sortedResults[0][0];
             const winner = getPersonById(winnerId);
@@ -3911,7 +4111,7 @@
                 const btn = document.createElement('button');
                 btn.innerText = "結果を確認";
                 btn.style = "width:100%; padding:10px; margin-top:10px; background:#34495e; color:white; border:none; border-radius:5px; cursor:pointer;";
-                btn.onclick = () => finishPartyElection(party, winner);
+                btn.onclick = () => { finishPartyElection(party, winner); closeUniversalModal(); };
                 countingArea.appendChild(btn);
             }
         }, 1000);
@@ -3956,6 +4156,7 @@
         // 議会選挙や大統領選挙がある月かどうかを判定する既存のフラグをチェック
         return typeof isElectionYear !== 'undefined' && isElectionYear && gameDate.getMonth() === 0;
     }
+    updateParliamentUI();
 </script>
 
 </html>

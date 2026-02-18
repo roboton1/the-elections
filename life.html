@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Family Tree Sim</title>
+    <script src="https://balkan.app/js/FamilyTree.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        #tree {
+            width: 100%;
+            height: 100vh;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="controls">
+        <h2>家系図シム</h2>
+        <button onclick="nextYear()">1年進める</button>
+        <div id="status">西暦 2024年</div>
+    </div>
+
+    <div id="tree"></div>
+
+    <script>
+        let year = 2024;
+        let nextId = 1;
+
+        // シミュレーション用の全データ
+        let people = [
+            { id: 1, name: "Adam", gender: "male", age: 25, pids: [2], isAlive: true },
+            { id: 2, name: "Eve", gender: "female", age: 23, pids: [1], isAlive: true }
+        ];
+        nextId = 3;
+
+        // 描画用オブジェクトの初期化
+        const family = new FamilyTree(document.getElementById("tree"), {
+            nodeBinding: {
+                field_0: "name",
+                field_1: "age"
+            },
+            nodes: people
+        });
+
+        function nextYear() {
+            year++;
+            document.getElementById("status").innerText = `西暦 ${year}年`;
+
+            let newPeople = [];
+
+            people.forEach(p => {
+                if (!p.isAlive) return;
+                p.age++;
+
+                // 1. 死亡判定 (高齢ほど高確率)
+                if (Math.random() < (p.age / 110)) {
+                    p.isAlive = false;
+                    p.name += " (故)";
+                }
+
+                // 2. 出産判定 (pidsがある＝結婚している場合)
+                // 重複を避けるため女性(female)側だけで判定
+                if (p.gender === "female" && p.pids && p.pids.length > 0 && p.age < 45) {
+                    if (Math.random() < 0.15) { // 15%の確率で子供
+                        const partnerId = p.pids[0];
+                        const baby = {
+                            id: nextId++,
+                            name: "Child_" + nextId,
+                            gender: Math.random() > 0.5 ? "male" : "female",
+                            age: 0,
+                            fid: partnerId, // 父ID
+                            mid: p.id,      // 母ID
+                            isAlive: true
+                        };
+                        newPeople.push(baby);
+                    }
+                }
+            });
+
+            people.push(...newPeople);
+
+            // 図を更新
+            family.draw(FamilyTree.SEARCH);
+        }
+    </script>
+</body>
+
+</html>

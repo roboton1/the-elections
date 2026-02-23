@@ -635,8 +635,8 @@
     const CABINET_ROLES = {
         vicePresident: "副大統領",
         stateSecretary: "外務長官",
-        justiceSecretary: "司法長官",
-        defenseSecretary: "国防長官",
+        justiceSecretary: "法務長官",
+        defenseSecretary: "軍事長官",
         commerceSecretary: "商務長官",
         homelandSecretary: "国土開発長官"
     };
@@ -1782,6 +1782,330 @@
         ]);
     }
 
+    // 全国大会・党予備選挙
+    // 党ごとに最強の1人を選出する（一本化ロジック）
+    function startPartyConvention(player, rivals) {
+        // 1. プレイヤーの党を安全に取得（エラー落ち防止）
+
+        let currentPartyId = null
+        if (player) {
+            currentPartyId = player.partyId || player.partyid || null;
+        }
+        const party = parties.find(p => p.id === currentPartyId) || { name: "無所属", color: "#95a5a6" };
+
+        // 2. プレイヤーの党の候補者リスト（自分 ＋ ライバル）
+        const contestants = [player, ...rivals];
+
+        // 🤖 3. 【AIの裏処理】他の政党も、それぞれ「最強の1人」に一本化する！
+        let otherPartyWinners = [];
+        parties.forEach(p => {
+            if (p.id !== party.id) { // プレイヤーの党以外
+                // その党の全NPCを取得
+                let partyNpcs = npcs.filter(n => (n.partyId || n.partyid) === p.id);
+                if (partyNpcs.length > 0) {
+                    // カリスマ（または影響力）が一番高いヤツを「党代表」として選出
+                    partyNpcs.sort((a, b) => (b.charisma || 0) - (a.charisma || 0));
+                    otherPartyWinners.push(partyNpcs[0]);
+                }
+            }
+        });
+        console.log("裏で決定した他党の代表たち:", otherPartyWinners.map(n => n.name));
+
+        // 📸 4. UI構築：候補者の顔写真を並べるカッコいいグリッド
+        let candidatesHtml = `<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-top: 20px;">`;
+
+        contestants.forEach(n => {
+            const isPlayer = n.id === player.id; // 自分かどうか判定
+            // ※ もし画像がない場合は、アバターの絵文字やダミー画像を出す
+            const imgSrc = n.icon || "default_avatar.png";
+            // 自分だけ金色の枠で光らせる演出
+            const borderStyle = isPlayer ? `border: 3px solid #f1c40f; box-shadow: 0 0 12px #f1c40f;` : `border: 2px solid #ccc;`;
+
+            candidatesHtml += `
+            <div style="text-align: center; width: 80px;">
+                <div style="width: 60px; height: 60px; margin: 0 auto; border-radius: 50%; overflow: hidden; ${borderStyle} background: #eee; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+                    ${n.icon ? `<img src="${imgSrc}" style="width:100%; height:100%; object-fit:cover;">` : `👤`}
+                </div>
+                <div style="font-size: 0.75em; margin-top: 8px; font-weight: bold; line-height: 1.2;">
+                    ${isPlayer ? "⭐ あなた" : n.name}
+                </div>
+            </div>
+        `;
+        });
+        candidatesHtml += `</div>`;
+
+        // 🏛️ 5. モーダルの全体HTML（デザインを超リッチに）
+        const html = `
+        <div style="background: linear-gradient(135deg, ${party.color}, #2c3e50); color:white; padding:25px; text-align:center; border-radius:10px; margin-bottom:15px; box-shadow: 0 6px 20px rgba(0,0,0,0.3);">
+            <h1 style="margin:0; font-size: 1.8em; letter-spacing:3px; text-shadow: 1px 1px 4px rgba(0,0,0,0.6);">${party.name.toUpperCase()}</h1>
+            <p style="margin:5px 0 0 0; opacity:0.9; font-weight: bold;">党全国大会 (NATIONAL CONVENTION)</p>
+        </div>
+        
+        <div id="counting-area" style="min-height:200px; text-align:center; background: #fdfdfd; padding: 20px; border-radius: 8px; border: 1px solid #ddd; color:black;">
+            <p style="font-size: 0.95em; color: #444; font-weight: bold;">大統領選挙の候補者を選ぶため、<br>代議員による指名投票が行われます。</p>
+            ${candidatesHtml}
+        </div>
+    `;
+
+        // 6. 汎用モーダルを呼び出す
+        openUniversalModal("大統領候補 指名争い", html, [
+            {
+                text: "代議員投票を開始！",
+                color: party.color,
+                // 🌟 超重要：集計関数に「他党の勝者(otherPartyWinners)」も一緒に渡す！
+                cb: () => convensionvote(party, contestants)
+            }
+        ]);
+    }
+    function convensionvote(party, contestants) {
+        // 1. 各候補者の票と「支持者リスト」をリセット
+        contestants.forEach(c => {
+            c.partyVotes = 0;
+            c.supporters = []; // 誰が投票したかのアイコン用
+        });
+        // 2. 投票権を持つ党員NPCを取得（自分以外の党員）
+        const partyVoters = party.members ? party.members.filter(m => m.id !== "player") // データ構造に合わせて調整
+            : npcs.filter(n => (n.partyId || n.partyid) === party.id && n.id !== "player");
+        const totalVotes = partyVoters.length + 1; // NPC全員 ＋ プレイヤー自身
+
+        // 🌟 UI構築：最初は「プレイヤーの投票画面」を見せる
+        const voteHtml = `
+        <div style="text-align:center; margin-bottom: 15px;">
+            <h3 style="margin:0; color:${party.color};">${party.name} 代表指名投票</h3>
+            <p style="font-size:0.8em; color:#666;">党員 ${totalVotes}名 による直接投票</p>
+        </div>
+
+        <div id="player-voting-area" style="text-align:center; margin-bottom: 20px; padding: 15px; background: #fdfdfd; border-radius: 8px; border: 2px dashed ${party.color};">
+            <p style="margin-top:0; font-weight:bold; color: #333;">あなたは誰に投票しますか？</p>
+            <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px;">
+                ${contestants.map((c, i) => `
+                    <button class="player-vote-btn" data-index="${i}" style="padding: 8px 12px; border-radius: 5px; cursor: pointer; border: 1px solid #ccc; background: white; font-weight: bold; transition: 0.2s;">
+                        ${c.id === "player" || c.isPlayer ? "⭐ 自分に投票" : c.name}
+                    </button>
+                `).join('')}
+            </div>
+        </div>
+
+        <div id="vote-bars-container" style="max-width:400px; margin:0 auto; text-align:left;">
+            ${contestants.map((c, i) => `
+                <div style="margin-bottom: 15px;">
+                    <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:0.9em; margin-bottom:4px;">
+                        <span>${c.id === "player" || c.isPlayer ? "⭐ あなた" : c.name}</span>
+                        <span id="count-${i}">0票</span>
+                    </div>
+                    <div style="background:#eee; width:100%; height:18px; border-radius:10px; overflow:hidden;">
+                        <div id="bar-${i}" style="background:${party.color}; width:0%; height:100%; transition: width 0.4s ease-out;"></div>
+                    </div>
+                    <div id="supporters-${i}" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; min-height: 28px;"></div>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div id="next-action-area" style="text-align:center; margin-top:20px; display:none;">
+            <button id="finish-convention-btn" style="padding: 10px 24px; background:${party.color}; color:white; border:none; border-radius:5px; cursor:pointer; font-size: 1.1em; font-weight:bold; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">結果を確定して次へ ⏩</button>
+        </div>
+    `;
+
+        openUniversalModal("🗳️ 党内予備選", voteHtml, [], { forceOpen: true });
+
+        // 🌟 処理1：プレイヤーが投票するのを待つ
+        setTimeout(() => {
+            const buttons = document.querySelectorAll('.player-vote-btn');
+            buttons.forEach(btn => {
+                btn.onclick = (e) => {
+                    const targetIndex = parseInt(e.target.getAttribute('data-index'));
+
+                    // プレイヤーの票を追加
+                    contestants[targetIndex].partyVotes++;
+                    contestants[targetIndex].supporters.push({
+                        name: "あなた",
+                        image: profile.icon || profile.image,
+                        isPlayer: true
+                    });
+
+                    // 投票ボタンを消す
+                    document.getElementById('player-voting-area').style.display = 'none';
+
+                    // NPCたちの投票を開始！
+                    startNpcVotingAnimation(contestants);
+                };
+            });
+        }, 100);
+
+        // 🌟 処理2：NPCが一人ずつ投票していくアニメーション
+        function startNpcVotingAnimation(contestants) {
+            // 1. 投票する人たち（党員全員）
+            const voters = party.members || party.member || [];
+
+            let voterIndex = 0;
+            updateChart(contestants);
+
+            const intervalId = setInterval(() => {
+                // 効率化：党員が多い場合は1回で10人ずつ処理
+                const batchSize = voters.length > 100 ? 10 : 1;
+
+                for (let i = 0; i < batchSize; i++) {
+                    // 全員が投票し終えたら終了
+                    if (voterIndex >= voters.length) {
+                        clearInterval(intervalId);
+                        // 「結果を確定」ボタンを出す
+                        const nextArea = document.getElementById('next-action-area');
+                        if (nextArea) nextArea.style.display = 'block';
+
+                        const finishBtn = document.getElementById('finish-convention-btn');
+                        if (finishBtn) {
+                            finishBtn.onclick = () => {
+                                closeUniversalModal();
+                                finalizePartyConvention(party, contestants);
+                            };
+                        }
+                        return;
+                    }
+
+                    const voter = voters[voterIndex];
+
+                    // プレイヤーは最初のクリックで投票済みなので飛ばす
+                    if (voter.id === "player" || voter.isPlayer) {
+                        voterIndex++;
+                        continue;
+                    }
+
+                    // --- 🗳️ 誰に投票するか決めるロジック ---
+                    let selectedCandidateIndex = 0;
+                    let highestScore = -Infinity;
+
+                    // 🌟 【超重要】ここを候補者(contestants)の数だけループさせる
+                    contestants.forEach((cand, candIndex) => {
+                        let score = 0;
+
+                        // 思想の一致度(0〜100)を計算
+                        if (typeof calculateAffinity === 'function' && voter.ideology && cand.ideology) {
+                            score = calculateAffinity(voter.ideology, cand.ideology);
+                        } else {
+                            score = Math.random() * 50;
+                        }
+
+                        // 【自己投票補正】自分が候補者なら迷わず自分へ！
+                        if (voter.id === cand.id || voter.name === cand.name) {
+                            score += 10000;
+                        }
+
+                        // 【現職ボーナス】
+                        if (cand.president) score += 10;
+
+                        // 人間味のあるランダムな揺らぎ
+                        score += (Math.random() * 10 - 5);
+
+                        if (score > highestScore) {
+                            highestScore = score;
+                            selectedCandidateIndex = candIndex;
+                        }
+                    });
+
+                    // --- ✅ 候補者(contestant)に票を反映 ---
+                    const winner = contestants[selectedCandidateIndex];
+                    if (winner) {
+                        winner.partyVotes++;
+                        winner.supporters.push(voter); // アイコン表示用リストへ
+                    }
+                    voterIndex++;
+                }
+
+                // 全員分のアイコンとバーを更新
+                updateChart(contestants);
+
+            }, 50); // 速度を上げてサクサク進むように設定
+        }
+    }
+    // 🌟 処理3：グラフとアイコンの画面更新
+    function updateChart(contestants) {
+        totalVotes = contestants.reduce((sum, c) => sum + c.partyVotes, 0);
+        contestants.forEach((c, i) => {
+            const pct = (c.partyVotes / totalVotes) * 100;
+            const bar = document.getElementById(`bar-${i}`);
+            const count = document.getElementById(`count-${i}`);
+            const supportersDiv = document.getElementById(`supporters-${i}`);
+
+            if (bar && count) {
+                bar.style.width = `${pct}%`;
+                count.innerText = `${c.partyVotes}票`;
+            }
+
+            // 投票してくれた人の顔写真を並べる
+            if (supportersDiv) {
+                supportersDiv.innerHTML = c.supporters.map(s => {
+                    const imgSrc = s.image || s.icon;
+                    // プレイヤーのアイコンだけ枠を金色にする
+                    const borderColor = s.isPlayer ? "#f1c40f" : "#aaa";
+
+                    if (imgSrc) {
+                        return `<img src="${imgSrc}" title="${s.name}" style="width:28px; height:28px; border-radius:50%; border:2px solid ${borderColor}; object-fit:cover; box-shadow: 1px 1px 3px rgba(0,0,0,0.3);">`;
+                    } else {
+                        // 画像がないNPCはシルエットアイコン
+                        return `<div title="${s.name}" style="width:28px; height:28px; border-radius:50%; border:2px solid ${borderColor}; background:#ddd; display:flex; align-items:center; justify-content:center; font-size:14px;">👤</div>`;
+                    }
+                }).join('');
+            }
+        });
+    }
+
+    function finalizePartyConvention(party, contestants) {
+        // 1. 党大会の勝者を決める（一番票が多い人）
+        contestants.sort((a, b) => b.partyVotes - a.partyVotes);
+        const winner = contestants[0];
+        const isPlayerWinner = winner.id === "player";
+
+        // 🤖 2. ここで初めて「本選用」の名簿（finalCandidates）を作る
+        let finalCandidates = [];
+        finalCandidates.push(winner); // 自分の党の勝者を追加
+
+        // AI政党も、それぞれ一番カリスマが高いヤツを1人だけ選出する
+        parties.forEach(p => {
+            if (p.id !== party.id) {
+                let partyNpcs = npcs.filter(n => (n.partyId || n.partyid) === p.id);
+                if (partyNpcs.length > 0) {
+                    partyNpcs.sort((a, b) => (b.charisma || 50) - (a.charisma || 50));
+                    finalCandidates.push(partyNpcs[0]);
+                }
+            }
+        });
+
+        // 🌟 3. 結果発表と、大統領選（本戦）への合流
+        const resultHtml = `
+        <div style="text-align:center; padding:20px;">
+            <h2 style="color:${party.color}; margin-top:0;">党代表決定！</h2>
+            <div style="font-size:3em; margin:10px 0;">🎉</div>
+            <p style="font-size:1.2em; font-weight:bold;">
+                ${winner.name} が ${party.name} の大統領候補に指名されました！
+            </p>
+            ${isPlayerWinner
+                ? "<p style='color:#27ae60;'>おめでとうございます！いよいよ本戦です。</p>"
+                : "<p style='color:#e74c3c;'>残念ながら、あなたは党の指名を得られませんでした...</p>"}
+        </div>
+    `;
+
+        openUniversalModal("党大会 結果発表", resultHtml, [
+            {
+                text: isPlayerWinner ? "大統領選挙（本戦）へ進む！" : "一般有権者として本戦を見守る",
+                color: isPlayerWinner ? "#4ecca3" : "#7f8c8d",
+                // 本戦の関数に、出来上がった名簿（finalCandidates）を渡すだけ！
+                cb: () => proceedToVote(isPlayerWinner, finalCandidates)
+            },
+            (!isPlayerWinner ? {
+                text: "党を脱退し、無所属として立候補",
+                color: "#e74c3c",
+                cb: () => {
+                    closeUniversalModal();
+                    profile.partyId = null; // 党脱退処理
+                    proceedToVote(true, finalCandidates);
+                }
+            } : null)
+        ].filter(Boolean));
+    }
+
+    let myPartyId = null;
+
+
     // 内閣の構成に基づいた分析テキスト（おまけ）
     function generateCabinetAnalysis() {
         const emptyCount = Object.values(currentCabinet).filter(v => !v).length;
@@ -1796,7 +2120,7 @@
     function runElection() {
         setGameSpeed(0); // 時間を止める
         if (!gameSettings.skipPresidentialElection) {
-            const profile = JSON.parse(localStorage.getItem('political_game_data'));
+            myPartyId = profile.partyId;
 
             // 立候補確認用のHTMLコンテンツ
             const htmlContent = `
@@ -1819,16 +2143,62 @@
                         text: "立候補する！",
                         color: "#4ecca3",
                         cb: () => {
-                            proceedToVote(true),
-                                isPlayerRunningForPresident = true
+
+                            isPlayerRunningForPresident = true;
+
+                            // 1. NPC候補を多めに選出
+                            const potential = [...npcs].sort((a, b) => {
+                                if (a.president) return Math.random() < 0.8 ? -1 : 1;
+                                return 0.5 - Math.random();
+                            }).slice(0, 5);
+
+                            // 🌟 2. 【超重要】プロフィールの partyId を確実に抜く
+                            // もし profile.partyId がダメなら profile.data.partyId などの可能性も考慮
+                            const currentId = profile.partyId || null;
+
+                            // 🚨 これでも undefined なら、最終手段として localStorage から直接もぎ取る
+
+                            console.log("確定した党ID:", currentId);
+                            console.log("Profile側からの取得ID:", profile.partyId || (profile.data ? profile.data.partyId : null));
+
+
+                            // 3. 同じ党のライバルを抽出
+                            const myPartyContestants = potential.filter(n => n.partyId === currentId);
+
+                            console.log(`--- 予備選（${currentId}）開催 ---`);
+                            console.log("対戦相手:", myPartyContestants.map(n => n.name));
+
+                            closeUniversalModal();
+                            startPartyConvention(profile, myPartyContestants);
+
                         }
                     },
                     {
                         text: "今回は見送る",
                         color: "#e74c3c",
                         cb: () => {
-                            proceedToVote(false),
-                                isPlayerRunningForPresident = false
+
+                            isPlayerRunningForPresident = true;
+
+                            // 1. NPC候補を多めに選出
+                            const potential = [...npcs].sort((a, b) => {
+                                if (a.president) return Math.random() < 0.8 ? -1 : 1;
+                                return 0.5 - Math.random();
+                            }).slice(0, 5);
+
+                            // 🌟 2. 【超重要】プロフィールの partyId を確実に抜く
+                            // もし profile.partyId がダメなら profile.data.partyId などの可能性も考慮
+                            // 🚨 これでも undefined なら、最終手段として localStorage から直接もぎ取る
+
+                            // 3. 同じ党のライバルを抽出
+                            const currentId = profile.partyId || null;
+                            console.log("確定した党ID:", currentId);
+                            const myPartyContestants = potential.filter(n => n.partyId === currentId);
+                            console.log("対戦相手:", myPartyContestants.map(n => n.name));
+
+                            closeUniversalModal();
+                            startPartyConvention(profile, myPartyContestants);
+
                         }
                     }
                 ]
@@ -1842,41 +2212,74 @@
 
     let candidates = [];
 
-    function proceedToVote(willRun) {
-        closeUniversalModal(); // 一旦閉じる
+    function proceedToVote(willRun, finalCandidates = []) {
+        closeUniversalModal(); // モーダルを閉じる
 
-        const profile = JSON.parse(localStorage.getItem('political_game_data'));
+
+        // グローバル変数 candidates をリセット（または初期化）
         candidates = [];
 
-        // プレイヤーを候補者に追加
-        if (willRun) {
-            candidates.push({
-                id: 'player',
-                name: profile.name,
-                icon: profile.icon,
-                isPlayer: true,
-                termCount: 0,
-                ideology: profile.ideology,
-                votes: 0,
-                supporters: []
+        // --- パターンA: 党大会を通ってきた場合 (finalCandidatesがある) ---
+        if (finalCandidates && finalCandidates.length > 0) {
+            // finalCandidates の中身を本戦用に整形して流し込む
+            finalCandidates.forEach(c => {
+                const isP = c.id === 'player' || c.isPlayer;
+                const text = c.president ? "再選を目指して大統領選挙に本戦立候補" : "党代表として大統領選挙本戦に立候補";
+
+                // NPCの場合のみ履歴を追加
+                if (!isP && c.history) {
+                    c.history.push(`${new Date(gameDate).getFullYear()}年:${text}`);
+                }
+
+                candidates.push({
+                    ...c,
+                    votes: 0,
+                    supporters: [],
+                    isPlayer: isP
+                });
+            });
+
+            if (!profile.partyId) {
+                if (willRun) {
+                    candidates.push({
+                        id: 'player',
+                        name: profile.name,
+                        icon: profile.icon,
+                        isPlayer: true,
+                        votes: 0,
+                        supporters: [],
+                        ideology: profile.ideology
+                    });
+                }
+            }
+        }
+        // --- パターンB: 予備選をスキップした場合（念のためのフォールバック） ---
+        else {
+            if (willRun) {
+                candidates.push({
+                    id: 'player',
+                    name: profile.name,
+                    icon: profile.icon,
+                    isPlayer: true,
+                    votes: 0,
+                    supporters: [],
+                    ideology: profile.ideology
+                });
+            }
+
+            // 予備選がない場合の従来通りのランダム選出
+            const potential = [...npcs].sort((a, b) => {
+                if (a.president) return Math.random() < 0.8 ? -1 : 1;
+                return 0.5 - Math.random();
+            }).slice(0, 3);
+
+            potential.forEach(n => {
+                candidates.push({ ...n, votes: 0, supporters: [], isPlayer: false });
             });
         }
 
-        // NPCからランダムに3人立候補（先行者利益枠）
-        // 1. 現職(president)がいれば80%で優先し、全体から上位3人だけ選ぶ
-        const potential = [...npcs].sort((a, b) => {
-            if (a.president) return Math.random() < 0.8 ? -1 : 1;
-            return 0.5 - Math.random();
-        }).slice(0, 3);
-
-        // 2. 選ばれた3人（現職含む）を候補者にする
-        potential.forEach(n => {
-            const text = n.president ? "再選を目指して大統領選挙に立候補" : "大統領選挙に立候補";
-            n.history.push(`${new Date(gameDate).getFullYear()}年:${text}`);
-            candidates.push({ ...n, votes: 0, supporters: [], isPlayer: false });
-        });
-
-        // 次の「投票先選択」へ進む
+        // 🌟 本格的な「本戦投票画面」へ！
+        console.log("本戦候補者名簿:", candidates);
         showVotingScreen(candidates, willRun);
     }
 
@@ -1989,7 +2392,12 @@
 
         // 3. 結果の整理と履歴への保存（スナップショット化）
         candidates.sort((a, b) => b.votes - a.votes);
-        const realNpc = npcs.find(n => n.id === candidates[0].id);
+        let realNpc = null;
+        if (!candidates[0].isPlayer) {
+            realNpc = npcs.find(n => n.id === candidates[0].id);
+        } else {
+            realNpc = profile;
+        }
 
         // 2. 本物が見つかったら、それを大統領にする（これで同期される！）
         if (realNpc) {
@@ -2037,18 +2445,20 @@
         const year = new Date(gameDate).getFullYear();
 
         // 1位
-        if (first) {
+        if (first && !first.isPlayer) {
             first.history.push(`${year}年: 大統領選挙で当選（${first.votes}票）`);
         }
         // 2位（elseを消す！）
-        if (second) {
+        if (second && !second.isPlayer) {
             second.history.push(`${year}年: 大統領選挙で2位（${second.votes}票）`);
         }
         // 3位以下（ここもelseを消す！）
         if (others.length > 0) {
             others.forEach((other, index) => {
                 const rank = index + 3; // others[0]は3位なので
-                other.history.push(`${year}年: 大統領選挙で${rank}位（${other.votes}票）`);
+                if (!other.isPlayer) {
+                    other.history.push(`${year}年: 大統領選挙で${rank}位（${other.votes}票）`);
+                }
             });
         }
         if (first.isPlayer) {
@@ -2686,6 +3096,8 @@
             profile.partyId = partyId;
             party.members.push(profile); // プレイヤーオブジェクトを追加
             showPartyDetail(partyId); // 再描画
+            myPartyId = profile.partyId;
+
         } else {
             alert(message);
         }
@@ -2700,6 +3112,7 @@
             party.members = party.members.filter(m => m.id !== profile.id);
             profile.partyId = null;
             alert(`${party.name} を離党しました。`);
+            myPartyId = profile.partyId;
             openPartyMenu(); // メニューに戻る
         }
     }
@@ -3297,7 +3710,7 @@
             </div>
             <p id="latest-vote" style="font-size:0.8em; color:#666; margin-top:10px;">有権者が投票所に移動中...</p>
         </div>
-    `, []);
+    `, [], { forceOpen: true });
 
         for (let i = 0; i < npcs.length; i++) {
             const npc = npcs[i];
@@ -4137,7 +4550,7 @@
 
         const resultHtml = `
         <div style="text-align: center;">
-            <h2 style="color: #f1c40f;">当選：${winner.name}</h2>
+            <h2 style="color: #f1c40f;">新代表：${winner.name}</h2>
             <img src="${winner.icon}" style="width:100px; height:100px; border-radius:50%; border:4px solid #f1c40f; margin:10px 0; object-fit:cover;">
             <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; border-left: 5px solid #ccc; font-style: italic;">
                 「${speech}」
